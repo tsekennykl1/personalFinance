@@ -1,0 +1,114 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f4f9;
+    color: #333;
+  }
+  
+  .container {
+    max-width: 800px;
+    margin: 50px auto;
+    padding: 20px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  h1 {
+    text-align: center;
+    color: #007BFF;
+  }
+  
+  form {
+    margin-top: 20px;
+  }
+  
+  label {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: bold;
+  }
+  
+  input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    margin-bottom: 15px;
+  }
+  
+  button {
+    padding: 10px 15px;
+    background-color: #007BFF;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  
+  button:hover {
+    background-color: #0056b3;
+  }
+  
+  #stockResults {
+    margin-top: 30px;
+  }
+  
+  #stockTable {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+  }
+  
+  #stockTable th, #stockTable td {
+    border: 1px solid #ddd;
+    padding: 10px;
+    text-align: center;
+  }
+  
+  #stockTable th {
+    background-color: #007BFF;
+    color: white;
+  }
+  
+  #stockTable tr:nth-child(even) {
+    background-color: #f9f9f9;
+  }
+  
+  #stockTable tr:hover {
+    background-color: hsl(0, 0%, 95%);
+  }
+
+  .form-group {
+    display: flex; /* Use flexbox for alignment */
+    align-items: flex-start; /* Align items to the top */
+    gap: 10px; /* Add consistent spacing between input and button */
+    margin-bottom: 15px; /* Add spacing between rows */
+  }
+  
+  .form-group input {
+    flex: 1; /* Allow the input field to take up available space */
+    padding: 10px; /* Add padding for better appearance */
+    border: 1px solid #ccc; /* Add border */
+    border-radius: 4px; /* Slightly round the corners */
+    font-size: 16px; /* Adjust font size */
+  }
+  
+  .addFieldButton {
+    width: 40px; /* Set a fixed width */
+    height: 40px; /* Set a fixed height */
+    font-size: 20px; /* Adjust font size */
+    background-color: #007BFF; /* Button background color */
+    color: white; /* Button text color */
+    border: none; /* Remove border */
+    border-radius: 50%; /* Make the button circular */
+    cursor: pointer; /* Change cursor to pointer */
+    display: inline-flex; /* Center the "+" symbol */
+    align-items: center; /* Center vertically within the button */
+    justify-content: center; /* Center horizontally within the button */
+  }
+  
+  .addFieldButton:hover {
+    background-color: #0056b3; /* Darker blue on hover */
+  }
