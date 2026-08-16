@@ -41,14 +41,19 @@ env:
 
 
 permissions:
-  contents: read
   id-token: write
+  contents: read
+  
 
 jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
     environment: production
+
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
     - name: Checkout
