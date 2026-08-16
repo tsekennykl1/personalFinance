@@ -1,353 +1,430 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { fetchMonthlyPnlFrom202303 } from "../lib/pnlApi";
-import { currentYearMonth } from "../lib/months";
+import React, { useMemo, useState } from "react";
+import { useMonthlyReport } from "../lib/useMonthlyReport";
+import "./Home.css";
 
-function fmtCurrencyRoundUp(value) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
-  const n = Number(value);
-
-  // round UP to nearest dollar:
-  // +123.1 -> 124, -123.1 -> -123 (i.e., toward +infinity)
-  const roundedUp = Math.ceil(n);
-
-  const abs = Math.abs(roundedUp).toLocaleString("en-US", {
-    maximumFractionDigits: 0,
+function formatNumber(n, { decimals = 2 } = {}) {
+  if (n === null || n === undefined || Number.isNaN(Number(n))) return "—";
+  return Number(n).toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
   });
-
-  const sign = roundedUp < 0 ? "-" : "";
-  return `${sign}$${abs}`;
 }
 
-function sortDescByYearMonth(rows) {
-  return [...rows].sort((a, b) =>
-    String(b.year_month).localeCompare(String(a.year_month))
+function formatInt(n) {
+  if (n === null || n === undefined || Number.isNaN(Number(n))) return "—";
+  return Number(n).toLocaleString();
+}
+
+function formatPct(n) {
+  if (n === null || n === undefined || Number.isNaN(Number(n))) return "—";
+  return `${formatNumber(n, { decimals: 2 })}%`;
+}
+
+function money(n) {
+  // You can change currency label later (HKD, USD, etc.)
+  if (n === null || n === undefined || Number.isNaN(Number(n))) return "—";
+  const sign = Number(n) < 0 ? "-" : "";
+  const abs = Math.abs(Number(n));
+  return `${sign}${abs.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function Badge({ children, tone = "neutral" }) {
+  return <span className={`badge badge-${tone}`}>{children}</span>;
+}
+
+function Section({ title, open, onToggle, right, children }) {
+  return (
+    <section className="card">
+      <header className="cardHeader">
+        <div className="cardHeaderLeft">
+          <button className="btn" type="button" onClick={onToggle}>
+            {open ? "Hide" : "Show"}
+          </button>
+          <h2 className="cardTitle">{title}</h2>
+        </div>
+        {right ? <div className="cardHeaderRight">{right}</div> : null}
+      </header>
+      {open ? <div className="cardBody">{children}</div> : null}
+    </section>
   );
 }
 
-function yearFromYm(ym) {
-  return Number(String(ym).slice(0, 4));
+function Table({ columns, rows, keyFn }) {
+  return (
+    <div className="tableWrap">
+      <table className="table">
+        <thead>
+          <tr>
+            {columns.map((c) => (
+              <th key={c.key}>{c.header}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td className="muted" colSpan={columns.length}>
+                No data
+              </td>
+            </tr>
+          ) : (
+            rows.map((r, idx) => (
+              <tr key={keyFn ? keyFn(r) : idx}>
+                {columns.map((c) => (
+                  <td key={c.key}>{c.cell(r)}</td>
+                ))}
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 export default function Home() {
-  // today is 2026-08 (per your environment), but compute dynamically
-  const todayYm = useMemo(() => currentYearMonth(), []);
-  const currentYear = useMemo(() => yearFromYm(todayYm), [todayYm]);
+  const { status, error, data, reload } = useMonthlyReport();
 
-  // Dropdown should show: 2026, 2025, 2024, 2023
-  // (derived from current year down to 2023)
-  const yearOptions = useMemo(() => {
-    const minYear = 2023;
-    const years = [];
-    for (let y = currentYear; y >= minYear; y -= 1) years.push(y);
-    return years;
-  }, [currentYear]);
+  const [open, setOpen] = useState({
+    holdings: true,
+    performance: true,
+    pnlCurrent: true,
+    pnlAll: false,
+    raw: false,
+  });
 
-  // Default to show 2025
-  const [selectedYear, setSelectedYear] = useState(2025);
+  const holdingsRows = useMemo(() => {
+    // sort holdings by invested descending
+    return [...(data.holdings || [])].sort(
+      (a, b) => (b.total_invested || 0) - (a.total_invested || 0)
+    );
+  }, [data.holdings]);
 
-  // Responsive smaller font state
-  const [baseFontSize, setBaseFontSize] = useState(13); // Start with smaller text
-
-  // History state
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
-  const [allRows, setAllRows] = useState([]);
-
-  // Portfolio state
-  const [portfolioHoldings, setPortfolioHoldings] = useState([]);
-  const [portfolioSummary, setPortfolioSummary] = useState(null);
-  const [portfolioLoading, setPortfolioLoading] = useState(false);
-  const [portfolioErr, setPortfolioErr] = useState("");
-
-  // Fetch History data
-  useEffect(() => {
-    let isMounted = true;
-    async function fetchHistory() {
-      setLoading(true);
-      setErr("");
-      try {
-        const rows = await fetchMonthlyPnlFrom202303();
-        if (isMounted) setAllRows(rows || []);
-      } catch (error) {
-        if (isMounted) setErr(error?.message || "Failed to load history");
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    }
-    fetchHistory();
-    return () => { isMounted = false; };
-  }, []);
-
-  // Fetch portfolio data
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function fetchPortfolio() {
-      setPortfolioLoading(true);
-      setPortfolioErr("");
-      try {
-        const res = await fetch("https://z35lnmmzgi.execute-api.ap-east-1.amazonaws.com/prod/portfolio-performance", {
-          signal: controller.signal,
-        });
-        if (!res.ok) throw new Error("Failed to load portfolio");
-        const data = await res.json();
-        
-        let parsedHoldings = [];
-        let parsedSummary = null;
-        let parsedStockInfo = {};
-
-        // Handle various API Gateway response formats
-        if (Array.isArray(data) && data.length > 0) {
-          if (data[0].holdings) {
-            parsedHoldings = data[0].holdings;
-            parsedSummary = data[0].summary || null;
-            parsedStockInfo = data[0].stock_info || data[0].stock_data || {};
-          } else {
-            parsedHoldings = data;
-          }
-        } else if (data.body) {
-          const bodyData = typeof data.body === 'string' ? JSON.parse(data.body) : data.body;
-          parsedHoldings = Array.isArray(bodyData) ? bodyData : (bodyData.holdings || bodyData.portfolio || []);
-          parsedSummary = bodyData.summary || null;
-          parsedStockInfo = bodyData.stock_info || bodyData.stock_data || {};
-        } else if (data.holdings) {
-          parsedHoldings = data.holdings;
-          parsedSummary = data.summary || null;
-          parsedStockInfo = data.stock_info || data.stock_data || {};
-        }
-
-        // Merge extra stock info dictionary (like shortName_en) into holdings if it exists
-        if (Object.keys(parsedStockInfo).length > 0) {
-          parsedHoldings = parsedHoldings.map((h) => {
-            const sym = h.symbol || h.ticker;
-            return { ...h, ...(parsedStockInfo[sym] || {}) };
-          });
-        }
-
-        setPortfolioHoldings(Array.isArray(parsedHoldings) ? parsedHoldings : []);
-        setPortfolioSummary(parsedSummary);
-      } catch (e) {
-        if (e?.name === "AbortError") return;
-        setPortfolioErr(e?.message || "Failed to load portfolio");
-      } finally {
-        setPortfolioLoading(false);
-      }
-    }
-
-    fetchPortfolio();
-    return () => controller.abort();
-  }, []); 
-
-  // Filter from selected year up to today's month
-  const filteredRows = useMemo(() => {
-    return allRows.filter((row) => {
-      const rowYear = yearFromYm(row.year_month);
-      const isAfterOrEqualSelectedYear = rowYear >= selectedYear;
-      const isBeforeOrEqualToday = String(row.year_month).localeCompare(String(todayYm)) <= 0;
-      return isAfterOrEqualSelectedYear && isBeforeOrEqualToday;
-    });
-  }, [allRows, selectedYear, todayYm]);
+  const pnlAllRows = useMemo(() => {
+    // sort newest first by year_month (YYYY-MM lexicographically works)
+    return [...(data.allMonthlyPnl || [])].sort((a, b) =>
+      String(b.year_month || "").localeCompare(String(a.year_month || ""))
+    );
+  }, [data.allMonthlyPnl]);
 
   return (
-    <div className="pageContainer" style={{ transition: "all 0.2s" }}>
-      <style>{`
-        /* Overriding App.css to actually scale font up and down properly */
-        .pageContainer,
-        .pageContainer .table th, 
-        .pageContainer .table td, 
-        .pageContainer .inlineLabel,
-        .pageContainer .emptyCell,
-        .pageContainer select { 
-          font-size: ${baseFontSize}px !important; 
-        }
-        .pageContainer .sectionTitle { font-size: ${baseFontSize + 3}px !important; }
-        .pageContainer .cardTitle { font-size: ${baseFontSize + 5}px !important; }
-      `}</style>
-      
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "10px", gap: "8px" }}>
-        <button 
-          onClick={() => setBaseFontSize((s) => Math.max(9, s - 2))} 
-          style={{ padding: "4px 12px", cursor: "pointer", borderRadius: "4px", border: "1px solid #ccc", fontSize: "14px" }}
-        >
-          A-
-        </button>
-        <button 
-          onClick={() => setBaseFontSize((s) => Math.min(24, s + 2))} 
-          style={{ padding: "4px 12px", cursor: "pointer", borderRadius: "4px", border: "1px solid #ccc", fontSize: "14px" }}
-        >
-          A+
-        </button>
-      </div>
-      <main>
-        {/* Portfolio section */}
-        <section className="card">
-          <h3 className="sectionTitle">Holdings</h3>
-          {portfolioLoading ? (
-            <div className="note">Loading portfolio…</div>
-          ) : portfolioErr ? (
-            <div className="errorBox">
-              <div className="errorTitle">Couldn’t load portfolio</div>
-              <div className="errorMsg">{portfolioErr}</div>
-            </div>
-          ) : (
-            <div className="tableWrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Ticker</th>
-                    <th>Name</th>
-                    <th className="num">Shares</th>
-                    <th className="num">Avg Cost</th>
-                    <th className="num">Last Price</th>
-                    <th className="num">Market Value</th>
-                    <th className="num">Unrealized P/L</th>
-                  </tr>
-                </thead>
-                <tbody>
-                {portfolioHoldings.length === 0 ? (
-                      <tr>
-                        <td colSpan="7" className="emptyCell">
-                          No holdings yet. Use{" "}
-                          <Link to="/stock-retrieval">Stock Retrieval</Link> to fetch prices.
-                        </td>
-                      </tr>
-                    ) : (
-                      <>
-                        {portfolioHoldings.map((h, i) => {
-                          const unrealizedPnl = Number(h.gain_loss_amount || h.unrealized_pnl || h.unrealizedPnl || 0);
-                          const shares = Number(h.quantity || h.shares || 0);
-                          const avgCost = Number(h.avg_price || h.avg_cost || h.avgCost || 0);
-                          const lastPrice = Number(h.current_price || h.last_price || h.lastPrice || h.price || 0);
-                          const marketValue = Number(h.current_value || h.market_value || h.marketValue || 0);
-                          
-                          // Correctly pull shortName_en if provided, else fallback
-                          const name = h.shortName_en || h.longName_en || h.name || "—";
-                          return (
-                            <tr key={h.symbol || h.ticker || i}>
-                              <td>{h.symbol || h.ticker || "—"}</td>
-                              <td>{name}</td>
-                              <td className="num">{shares > 0 ? shares : "—"}</td>
-                              <td className="num">{fmtCurrencyRoundUp(avgCost)}</td>
-                              <td className="num">{fmtCurrencyRoundUp(lastPrice)}</td>
-                              <td className="num">{fmtCurrencyRoundUp(marketValue)}</td>
-                              <td className="num">
-                                <span className={unrealizedPnl >= 0 ? "pos" : "neg"}>
-                                  {fmtCurrencyRoundUp(unrealizedPnl)}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                        
-                        {/* Summary totals in the last row */}
-                        {portfolioSummary && (
-                          <tr style={{ background: "#e2e8f0", fontWeight: "800" }}>
-                            <td colSpan="3" style={{ textAlign: "right" }}>Portfolio Totals:</td>
-                            
-                            {/* Total Invested roughly aligns under Avg Cost */}
-                            <td className="num">{fmtCurrencyRoundUp(portfolioSummary.total_invested)}</td>
-                            
-                            {/* Empty space under Last Price */}
-                            <td className="num"></td>
-                            
-                            {/* Total Current Value aligns under Market Value */}
-                            <td className="num">{fmtCurrencyRoundUp(portfolioSummary.total_current_value)}</td>
-                            
-                            {/* Total Gain/Loss aligns under Unrealized P/L */}
-                            <td className="num">
-                              <span className={Number(portfolioSummary.total_gain_loss_amount) >= 0 ? "pos" : "neg"}>
-                                {fmtCurrencyRoundUp(portfolioSummary.total_gain_loss_amount)}
-                              </span>
-                            </td>
-                          </tr>
-                        )}
-                      </>
-                    )}
-                  </tbody>
-                </table>
-            </div>
-          )}
-        </section>
-
-        {/* History section */}
-        <section className="card">
-          <div className="cardHeader">
-            <h2 className="cardTitle">History (Monthly P&amp;L)</h2>
-            <div className="spacer" />
-
-            <label className="inlineControl">
-              <span className="inlineLabel">From Year</span>
-              <select
-                className="select"
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(Number(e.target.value))}
-              >
-                {yearOptions.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
-            </label>
+    <div className="page">
+      <div className="topBar">
+        <div>
+          <h1 className="title">Personal Finance</h1>
+          <div className="subTitle">
+            {data.yearMonth ? (
+              <>
+                <Badge tone="neutral">Month: {data.yearMonth}</Badge>{" "}
+                {data.previousMonth ? (
+                  <span className="muted">Prev: {data.previousMonth}</span>
+                ) : null}
+              </>
+            ) : (
+              <span className="muted">Monthly report</span>
+            )}
           </div>
+        </div>
 
-          {loading ? (
-            <div className="note">Loading…</div>
-          ) : err ? (
-            <div className="errorBox">
-              <div className="errorTitle">Couldn’t load history</div>
-              <div className="errorMsg">{err}</div>
+        <div className="actions">
+          <button
+            className="btn btn-primary"
+            type="button"
+            onClick={reload}
+            disabled={status === "loading"}
+          >
+            {status === "loading" ? "Loading..." : "Refresh"}
+          </button>
+        </div>
+      </div>
+
+      {status === "error" ? (
+        <div className="alert alert-error">
+          <div className="alertTitle">API error</div>
+          <div className="alertBody">{error?.message || String(error)}</div>
+        </div>
+      ) : null}
+
+      <Section
+        title="Portfolio Holdings"
+        open={open.holdings}
+        onToggle={() => setOpen((s) => ({ ...s, holdings: !s.holdings }))}
+        right={
+          <Badge tone="neutral">Count: {formatInt(holdingsRows.length)}</Badge>
+        }
+      >
+        {data.holdingsSummary ? (
+          <div className="summaryRow">
+            <div>
+              <div className="muted">Total Invested</div>
+              <div className="big">{money(data.holdingsSummary.total_invested)}</div>
             </div>
-          ) : (
-            <div className="tableWrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Year-Month</th>
-                    <th className="num">Open</th>
-                    <th className="num">Income</th>
-                    <th className="num">Expenses</th>
-                    <th className="num">Stock P/L</th>
-                    <th className="num">Dividend</th>
-                    <th className="num">Monthly G/L</th>
-                    <th className="num">Close</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRows.length === 0 ? (
-                    <tr>
-                      <td colSpan="8" className="emptyCell">
-                        No rows found from {selectedYear} to {todayYm}.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredRows.map((r) => {
-                      const gl = Number(r.monthly_gl);
-                      return (
-                        <tr key={`${r.year_month}`}>
-                          <td>{r.year_month}</td>
-                          <td className="num">{fmtCurrencyRoundUp(r.open_bal)}</td>
-                          <td className="num">{fmtCurrencyRoundUp(r.income)}</td>
-                          <td className="num">{fmtCurrencyRoundUp(r.expenses)}</td>
-                          <td className="num">{fmtCurrencyRoundUp(r.stock_pnl)}</td>
-                          <td className="num">{fmtCurrencyRoundUp(r.dividend)}</td>
-                          <td className="num">
-                            <span className={gl >= 0 ? "pos" : "neg"}>
-                              {fmtCurrencyRoundUp(gl)}
-                            </span>
-                          </td>
-                          <td className="num">{fmtCurrencyRoundUp(r.close_bal)}</td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+            <div>
+              <div className="muted">Current Value</div>
+              <div className="big">
+                {money(data.holdingsSummary.total_current_value)}
+              </div>
             </div>
-          )}
-        </section>
-      </main>
+            <div>
+              <div className="muted">Gain/Loss</div>
+              <div
+                className={`big ${
+                  (data.holdingsSummary.total_gain_loss_amount || 0) >= 0
+                    ? "pos"
+                    : "neg"
+                }`}
+              >
+                {money(data.holdingsSummary.total_gain_loss_amount)} (
+                {formatPct(data.holdingsSummary.total_gain_loss_percentage)})
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <Table
+          keyFn={(r) => r.symbol}
+          columns={[
+            { key: "symbol", header: "Symbol", cell: (r) => r.symbol || "—" },
+            {
+              key: "name",
+              header: "Name",
+              cell: (r) => r.shortName_en || "—",
+            },
+            {
+              key: "qty",
+              header: "Qty",
+              cell: (r) => formatInt(r.quantity),
+            },
+            {
+              key: "avg",
+              header: "Avg Price",
+              cell: (r) => formatNumber(r.avg_price, { decimals: 2 }),
+            },
+            {
+              key: "cur",
+              header: "Current Price",
+              cell: (r) => formatNumber(r.current_price, { decimals: 2 }),
+            },
+            {
+              key: "invested",
+              header: "Invested",
+              cell: (r) => money(r.total_invested),
+            },
+            {
+              key: "value",
+              header: "Current Value",
+              cell: (r) => money(r.current_value),
+            },
+            {
+              key: "gl",
+              header: "G/L",
+              cell: (r) => (
+                <span className={(r.gain_loss_amount || 0) >= 0 ? "pos" : "neg"}>
+                  {money(r.gain_loss_amount)} ({formatPct(r.gain_loss_percentage)})
+                </span>
+              ),
+            },
+          ]}
+          rows={holdingsRows}
+        />
+      </Section>
+
+      <Section
+        title="Current Month Stock Performance"
+        open={open.performance}
+        onToggle={() =>
+          setOpen((s) => ({ ...s, performance: !s.performance }))
+        }
+        right={
+          data.monthlyPerformanceTotals ? (
+            <Badge tone="neutral">
+              Net diff: {money(data.monthlyPerformanceTotals.total_net_diff)}
+            </Badge>
+          ) : null
+        }
+      >
+        {data.monthlyPerformanceTotals ? (
+          <div className="summaryRow">
+            <div>
+              <div className="muted">Start Value</div>
+              <div className="big">
+                {money(data.monthlyPerformanceTotals.total_start_value)}
+              </div>
+            </div>
+            <div>
+              <div className="muted">Current Value</div>
+              <div className="big">
+                {money(data.monthlyPerformanceTotals.total_current_value)}
+              </div>
+            </div>
+            <div>
+              <div className="muted">Realized G/L</div>
+              <div
+                className={`big ${
+                  (data.monthlyPerformanceTotals.total_realized_gl || 0) >= 0
+                    ? "pos"
+                    : "neg"
+                }`}
+              >
+                {money(data.monthlyPerformanceTotals.total_realized_gl)}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <Table
+          keyFn={(r) => r.symbol}
+          columns={[
+            { key: "symbol", header: "Symbol", cell: (r) => r.symbol || "—" },
+            { key: "sq", header: "Start Qty", cell: (r) => formatInt(r.start_qty) },
+            {
+              key: "sv",
+              header: "Start Value",
+              cell: (r) => money(r.start_value),
+            },
+            {
+              key: "sp",
+              header: "Start Price",
+              cell: (r) => formatNumber(r.start_price, { decimals: 2 }),
+            },
+            {
+              key: "aq",
+              header: "Adjusted Qty",
+              cell: (r) => formatInt(r.adjusted_qty),
+            },
+            {
+              key: "cp",
+              header: "Current Price",
+              cell: (r) => formatNumber(r.current_price, { decimals: 2 }),
+            },
+            {
+              key: "cv",
+              header: "Current Value",
+              cell: (r) => money(r.current_value),
+            },
+            {
+              key: "rg",
+              header: "Realized G/L",
+              cell: (r) => (
+                <span className={(r.realized_gl || 0) >= 0 ? "pos" : "neg"}>
+                  {money(r.realized_gl)}
+                </span>
+              ),
+            },
+            {
+              key: "diff",
+              header: "Month Net Diff",
+              cell: (r) => (
+                <span className={(r.month_net_diff || 0) >= 0 ? "pos" : "neg"}>
+                  {money(r.month_net_diff)}
+                </span>
+              ),
+            },
+          ]}
+          rows={data.monthlyPerformance || []}
+        />
+      </Section>
+
+      <Section
+        title="Current Month Profit & Loss"
+        open={open.pnlCurrent}
+        onToggle={() =>
+          setOpen((s) => ({ ...s, pnlCurrent: !s.pnlCurrent }))
+        }
+        right={
+          data.currentMonthlyPnl ? (
+            <Badge
+              tone={(data.currentMonthlyPnl.monthly_gl || 0) >= 0 ? "good" : "bad"}
+            >
+              Monthly G/L: {money(data.currentMonthlyPnl.monthly_gl)}
+            </Badge>
+          ) : null
+        }
+      >
+        {data.currentMonthlyPnl ? (
+          <div className="kpiGrid">
+            <div className="kpi">
+              <div className="muted">Open</div>
+              <div className="big">{money(data.currentMonthlyPnl.open_bal)}</div>
+            </div>
+            <div className="kpi">
+              <div className="muted">Income</div>
+              <div className="big pos">{money(data.currentMonthlyPnl.income)}</div>
+            </div>
+            <div className="kpi">
+              <div className="muted">Expenses</div>
+              <div className="big neg">
+                {money(data.currentMonthlyPnl.expenses)}
+              </div>
+            </div>
+            <div className="kpi">
+              <div className="muted">Stock P&L</div>
+              <div
+                className={`big ${
+                  (data.currentMonthlyPnl.stock_pnl || 0) >= 0 ? "pos" : "neg"
+                }`}
+              >
+                {money(data.currentMonthlyPnl.stock_pnl)}
+              </div>
+            </div>
+            <div className="kpi">
+              <div className="muted">Dividend</div>
+              <div className="big pos">
+                {money(data.currentMonthlyPnl.dividend)}
+              </div>
+            </div>
+            <div className="kpi">
+              <div className="muted">Close</div>
+              <div className="big">{money(data.currentMonthlyPnl.close_bal)}</div>
+            </div>
+          </div>
+        ) : (
+          <div className="muted">No current_monthly_pnl returned.</div>
+        )}
+      </Section>
+
+      <Section
+        title="All Months Profit & Loss"
+        open={open.pnlAll}
+        onToggle={() => setOpen((s) => ({ ...s, pnlAll: !s.pnlAll }))}
+        right={<Badge tone="neutral">Rows: {formatInt(pnlAllRows.length)}</Badge>}
+      >
+        <Table
+          keyFn={(r) => r.year_month}
+          columns={[
+            { key: "ym", header: "Month", cell: (r) => r.year_month || "—" },
+            { key: "open", header: "Open", cell: (r) => money(r.open_bal) },
+            { key: "income", header: "Income", cell: (r) => money(r.income) },
+            { key: "exp", header: "Expenses", cell: (r) => money(r.expenses) },
+            { key: "stock", header: "Stock P&L", cell: (r) => money(r.stock_pnl) },
+            { key: "div", header: "Dividend", cell: (r) => money(r.dividend) },
+            {
+              key: "gl",
+              header: "Monthly G/L",
+              cell: (r) => (
+                <span className={(r.monthly_gl || 0) >= 0 ? "pos" : "neg"}>
+                  {money(r.monthly_gl)}
+                </span>
+              ),
+            },
+            { key: "close", header: "Close", cell: (r) => money(r.close_bal) },
+          ]}
+          rows={pnlAllRows}
+        />
+      </Section>
+
+      <Section
+        title="Raw API Response (debug)"
+        open={open.raw}
+        onToggle={() => setOpen((s) => ({ ...s, raw: !s.raw }))}
+      >
+        <pre className="code">
+          {JSON.stringify(data.raw, null, 2)}
+        </pre>
+      </Section>
     </div>
   );
 }
