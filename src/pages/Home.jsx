@@ -1,5 +1,4 @@
-import React, { useMemo, useState } from "react";
-import { useMonthlyReport } from "../lib/useMonthlyReport";
+import React, { useMemo, useState, useEffect } from "react";
 import "./Home.css";
 
 function formatNumber(n, { decimals = 2 } = {}) {
@@ -21,7 +20,6 @@ function formatPct(n) {
 }
 
 function money(n) {
-  // You can change currency label later (HKD, USD, etc.)
   if (n === null || n === undefined || Number.isNaN(Number(n))) return "—";
   const sign = Number(n) < 0 ? "-" : "";
   const abs = Math.abs(Number(n));
@@ -86,25 +84,59 @@ function Table({ columns, rows, keyFn }) {
 }
 
 export default function Home() {
-  const { status, error, data, reload } = useMonthlyReport();
+  const [status, setStatus] = useState("loading");
+  const [error, setError] = useState(null);
+  const [data, setData] = useState({});
 
   const [open, setOpen] = useState({
     holdings: true,
     performance: true,
+    dividends: true,
     pnlCurrent: true,
     pnlAll: false,
     raw: false,
   });
 
+  const fetchReport = async () => {
+    setStatus("loading");
+    try {
+      const res = await fetch("https://z35lnmmzgi.execute-api.ap-east-1.amazonaws.com/prod/lambda_consolidated_monthly_report");
+      const json = await res.json();
+      
+      // Handle the array format response
+      const payload = Array.isArray(json) ? json[0] : json;
+      
+      setData({
+        yearMonth: payload?.year_month,
+        previousMonth: payload?.previous_month,
+        holdings: payload?.portfolio_performance?.holdings || [],
+        holdingsSummary: payload?.portfolio_performance?.summary || {},
+        monthlyPerformance: payload?.monthly_performance?.performance || [],
+        monthlyPerformanceTotals: payload?.monthly_performance?.totals || {},
+        currentMonthlyPnl: payload?.monthly_ledger || null,
+        dividendsList: payload?.dividends?.dividends || [],
+        totalDividends: payload?.dividends?.total_dividends || 0,
+        allMonthlyPnl: payload?.all_monthly_pnl || [],
+        raw: payload,
+      });
+      setStatus("success");
+    } catch (err) {
+      setError(err);
+      setStatus("error");
+    }
+  };
+
+  useEffect(() => {
+    fetchReport();
+  }, []);
+
   const holdingsRows = useMemo(() => {
-    // sort holdings by invested descending
     return [...(data.holdings || [])].sort(
       (a, b) => (b.total_invested || 0) - (a.total_invested || 0)
     );
   }, [data.holdings]);
 
   const pnlAllRows = useMemo(() => {
-    // sort newest first by year_month (YYYY-MM lexicographically works)
     return [...(data.allMonthlyPnl || [])].sort((a, b) =>
       String(b.year_month || "").localeCompare(String(a.year_month || ""))
     );
@@ -133,7 +165,7 @@ export default function Home() {
           <button
             className="btn btn-primary"
             type="button"
-            onClick={reload}
+            onClick={fetchReport}
             disabled={status === "loading"}
           >
             {status === "loading" ? "Loading..." : "Refresh"}
@@ -152,11 +184,9 @@ export default function Home() {
         title="Portfolio Holdings"
         open={open.holdings}
         onToggle={() => setOpen((s) => ({ ...s, holdings: !s.holdings }))}
-        right={
-          <Badge tone="neutral">Count: {formatInt(holdingsRows.length)}</Badge>
-        }
+        right={<Badge tone="neutral">Count: {formatInt(holdingsRows.length)}</Badge>}
       >
-        {data.holdingsSummary ? (
+        {data.holdingsSummary && Object.keys(data.holdingsSummary).length > 0 ? (
           <div className="summaryRow">
             <div>
               <div className="muted">Total Invested</div>
@@ -164,21 +194,12 @@ export default function Home() {
             </div>
             <div>
               <div className="muted">Current Value</div>
-              <div className="big">
-                {money(data.holdingsSummary.total_current_value)}
-              </div>
+              <div className="big">{money(data.holdingsSummary.total_current_value)}</div>
             </div>
             <div>
               <div className="muted">Gain/Loss</div>
-              <div
-                className={`big ${
-                  (data.holdingsSummary.total_gain_loss_amount || 0) >= 0
-                    ? "pos"
-                    : "neg"
-                }`}
-              >
-                {money(data.holdingsSummary.total_gain_loss_amount)} (
-                {formatPct(data.holdingsSummary.total_gain_loss_percentage)})
+              <div className={`big ${(data.holdingsSummary.total_gain_loss_amount || 0) >= 0 ? "pos" : "neg"}`}>
+                {money(data.holdingsSummary.total_gain_loss_amount)} ({formatPct(data.holdingsSummary.total_gain_loss_percentage)})
               </div>
             </div>
           </div>
@@ -188,40 +209,13 @@ export default function Home() {
           keyFn={(r) => r.symbol}
           columns={[
             { key: "symbol", header: "Symbol", cell: (r) => r.symbol || "—" },
-            {
-              key: "name",
-              header: "Name",
-              cell: (r) => r.shortName_en || "—",
-            },
-            {
-              key: "qty",
-              header: "Qty",
-              cell: (r) => formatInt(r.quantity),
-            },
-            {
-              key: "avg",
-              header: "Avg Price",
-              cell: (r) => formatNumber(r.avg_price, { decimals: 2 }),
-            },
-            {
-              key: "cur",
-              header: "Current Price",
-              cell: (r) => formatNumber(r.current_price, { decimals: 2 }),
-            },
-            {
-              key: "invested",
-              header: "Invested",
-              cell: (r) => money(r.total_invested),
-            },
-            {
-              key: "value",
-              header: "Current Value",
-              cell: (r) => money(r.current_value),
-            },
-            {
-              key: "gl",
-              header: "G/L",
-              cell: (r) => (
+            { key: "name", header: "Name", cell: (r) => r.shortName_en || "—" },
+            { key: "qty", header: "Qty", cell: (r) => formatInt(r.quantity) },
+            { key: "avg", header: "Avg Price", cell: (r) => formatNumber(r.avg_price, { decimals: 2 }) },
+            { key: "cur", header: "Current Price", cell: (r) => formatNumber(r.current_price, { decimals: 2 }) },
+            { key: "invested", header: "Invested", cell: (r) => money(r.total_invested) },
+            { key: "value", header: "Current Value", cell: (r) => money(r.current_value) },
+            { key: "gl", header: "G/L", cell: (r) => (
                 <span className={(r.gain_loss_amount || 0) >= 0 ? "pos" : "neg"}>
                   {money(r.gain_loss_amount)} ({formatPct(r.gain_loss_percentage)})
                 </span>
@@ -235,40 +229,24 @@ export default function Home() {
       <Section
         title="Current Month Stock Performance"
         open={open.performance}
-        onToggle={() =>
-          setOpen((s) => ({ ...s, performance: !s.performance }))
-        }
+        onToggle={() => setOpen((s) => ({ ...s, performance: !s.performance }))}
         right={
-          data.monthlyPerformanceTotals ? (
-            <Badge tone="neutral">
+          data.monthlyPerformanceTotals && Object.keys(data.monthlyPerformanceTotals).length > 0 ? (
+            <div 
+              className={`badge badge-${(data.monthlyPerformanceTotals.total_net_diff || 0) >= 0 ? "good" : "bad"}`}
+              style={{ fontSize: "1.15rem", padding: "6px 16px", borderWidth: "2px", boxShadow: "0 4px 6px rgba(0,0,0,0.08)", letterSpacing: "0.5px" }}
+            >
               Net diff: {money(data.monthlyPerformanceTotals.total_net_diff)}
-            </Badge>
+            </div>
           ) : null
         }
       >
-        {data.monthlyPerformanceTotals ? (
+        {data.monthlyPerformanceTotals && Object.keys(data.monthlyPerformanceTotals).length > 0 ? (
           <div className="summaryRow">
-            <div>
-              <div className="muted">Start Value</div>
-              <div className="big">
-                {money(data.monthlyPerformanceTotals.total_start_value)}
-              </div>
-            </div>
-            <div>
-              <div className="muted">Current Value</div>
-              <div className="big">
-                {money(data.monthlyPerformanceTotals.total_current_value)}
-              </div>
-            </div>
-            <div>
-              <div className="muted">Realized G/L</div>
-              <div
-                className={`big ${
-                  (data.monthlyPerformanceTotals.total_realized_gl || 0) >= 0
-                    ? "pos"
-                    : "neg"
-                }`}
-              >
+            <div><div className="muted">Start Value</div><div className="big">{money(data.monthlyPerformanceTotals.total_start_value)}</div></div>
+            <div><div className="muted">Current Value</div><div className="big">{money(data.monthlyPerformanceTotals.total_current_value)}</div></div>
+            <div><div className="muted">Realized G/L</div>
+              <div className={`big ${(data.monthlyPerformanceTotals.total_realized_gl || 0) >= 0 ? "pos" : "neg"}`}>
                 {money(data.monthlyPerformanceTotals.total_realized_gl)}
               </div>
             </div>
@@ -280,65 +258,48 @@ export default function Home() {
           columns={[
             { key: "symbol", header: "Symbol", cell: (r) => r.symbol || "—" },
             { key: "sq", header: "Start Qty", cell: (r) => formatInt(r.start_qty) },
-            {
-              key: "sv",
-              header: "Start Value",
-              cell: (r) => money(r.start_value),
-            },
-            {
-              key: "sp",
-              header: "Start Price",
-              cell: (r) => formatNumber(r.start_price, { decimals: 2 }),
-            },
-            {
-              key: "aq",
-              header: "Adjusted Qty",
-              cell: (r) => formatInt(r.adjusted_qty),
-            },
-            {
-              key: "cp",
-              header: "Current Price",
-              cell: (r) => formatNumber(r.current_price, { decimals: 2 }),
-            },
-            {
-              key: "cv",
-              header: "Current Value",
-              cell: (r) => money(r.current_value),
-            },
-            {
-              key: "rg",
-              header: "Realized G/L",
-              cell: (r) => (
-                <span className={(r.realized_gl || 0) >= 0 ? "pos" : "neg"}>
-                  {money(r.realized_gl)}
-                </span>
-              ),
-            },
-            {
-              key: "diff",
-              header: "Month Net Diff",
-              cell: (r) => (
-                <span className={(r.month_net_diff || 0) >= 0 ? "pos" : "neg"}>
-                  {money(r.month_net_diff)}
-                </span>
-              ),
-            },
+            { key: "sv", header: "Start Value", cell: (r) => money(r.start_value) },
+            { key: "sp", header: "Start Price", cell: (r) => formatNumber(r.start_price, { decimals: 2 }) },
+            { key: "aq", header: "Adjusted Qty", cell: (r) => formatInt(r.adjusted_qty) },
+            { key: "cp", header: "Current Price", cell: (r) => formatNumber(r.current_price, { decimals: 2 }) },
+            { key: "cv", header: "Current Value", cell: (r) => money(r.current_value) },
+            { key: "rg", header: "Realized G/L", cell: (r) => <span className={(r.realized_gl || 0) >= 0 ? "pos" : "neg"}>{money(r.realized_gl)}</span> },
+            { key: "diff", header: "Month Net Diff", cell: (r) => <span className={(r.month_net_diff || 0) >= 0 ? "pos" : "neg"}>{money(r.month_net_diff)}</span> },
           ]}
           rows={data.monthlyPerformance || []}
         />
       </Section>
 
       <Section
+        title="Current Month Dividends"
+        open={open.dividends}
+        onToggle={() => setOpen((s) => ({ ...s, dividends: !s.dividends }))}
+        right={
+          <Badge tone="good">
+            Total: {money(data.totalDividends || 0)}
+          </Badge>
+        }
+      >
+        <Table
+          keyFn={(r, idx) => r.symbol || idx}
+          columns={[
+            { key: "symbol", header: "Symbol", cell: (r) => r.symbol || "—" },
+            { key: "quantity", header: "Quantity", cell: (r) => formatInt(r.quantity) },
+            { key: "aps", header: "Amount / Share", cell: (r) => formatNumber(r.amount_per_share, { decimals: 4 }) },
+            { key: "date", header: "Payment Date", cell: (r) => r.payment_date || "—" },
+            { key: "amount", header: "Dividend Amount", cell: (r) => <span className="pos">{money(r.divident_amount)}</span> },
+          ]}
+          rows={data.dividendsList || []}
+        />
+      </Section>
+
+      <Section
         title="Current Month Profit & Loss"
         open={open.pnlCurrent}
-        onToggle={() =>
-          setOpen((s) => ({ ...s, pnlCurrent: !s.pnlCurrent }))
-        }
+        onToggle={() => setOpen((s) => ({ ...s, pnlCurrent: !s.pnlCurrent }))}
         right={
           data.currentMonthlyPnl ? (
-            <Badge
-              tone={(data.currentMonthlyPnl.monthly_gl || 0) >= 0 ? "good" : "bad"}
-            >
+            <Badge tone={(data.currentMonthlyPnl.monthly_gl || 0) >= 0 ? "good" : "bad"}>
               Monthly G/L: {money(data.currentMonthlyPnl.monthly_gl)}
             </Badge>
           ) : null
@@ -346,40 +307,12 @@ export default function Home() {
       >
         {data.currentMonthlyPnl ? (
           <div className="kpiGrid">
-            <div className="kpi">
-              <div className="muted">Open</div>
-              <div className="big">{money(data.currentMonthlyPnl.open_bal)}</div>
-            </div>
-            <div className="kpi">
-              <div className="muted">Income</div>
-              <div className="big pos">{money(data.currentMonthlyPnl.income)}</div>
-            </div>
-            <div className="kpi">
-              <div className="muted">Expenses</div>
-              <div className="big neg">
-                {money(data.currentMonthlyPnl.expenses)}
-              </div>
-            </div>
-            <div className="kpi">
-              <div className="muted">Stock P&L</div>
-              <div
-                className={`big ${
-                  (data.currentMonthlyPnl.stock_pnl || 0) >= 0 ? "pos" : "neg"
-                }`}
-              >
-                {money(data.currentMonthlyPnl.stock_pnl)}
-              </div>
-            </div>
-            <div className="kpi">
-              <div className="muted">Dividend</div>
-              <div className="big pos">
-                {money(data.currentMonthlyPnl.dividend)}
-              </div>
-            </div>
-            <div className="kpi">
-              <div className="muted">Close</div>
-              <div className="big">{money(data.currentMonthlyPnl.close_bal)}</div>
-            </div>
+            <div className="kpi"><div className="muted">Open</div><div className="big">{money(data.currentMonthlyPnl.open_bal)}</div></div>
+            <div className="kpi"><div className="muted">Income</div><div className="big pos">{money(data.currentMonthlyPnl.income)}</div></div>
+            <div className="kpi"><div className="muted">Expenses</div><div className="big neg">{money(data.currentMonthlyPnl.expenses)}</div></div>
+            <div className="kpi"><div className="muted">Stock P&L</div><div className={`big ${(data.currentMonthlyPnl.stock_pnl || 0) >= 0 ? "pos" : "neg"}`}>{money(data.currentMonthlyPnl.stock_pnl)}</div></div>
+            <div className="kpi"><div className="muted">Dividend</div><div className="big pos">{money(data.currentMonthlyPnl.dividend)}</div></div>
+            <div className="kpi"><div className="muted">Close</div><div className="big">{money(data.currentMonthlyPnl.close_bal)}</div></div>
           </div>
         ) : (
           <div className="muted">No current_monthly_pnl returned.</div>
@@ -401,15 +334,7 @@ export default function Home() {
             { key: "exp", header: "Expenses", cell: (r) => money(r.expenses) },
             { key: "stock", header: "Stock P&L", cell: (r) => money(r.stock_pnl) },
             { key: "div", header: "Dividend", cell: (r) => money(r.dividend) },
-            {
-              key: "gl",
-              header: "Monthly G/L",
-              cell: (r) => (
-                <span className={(r.monthly_gl || 0) >= 0 ? "pos" : "neg"}>
-                  {money(r.monthly_gl)}
-                </span>
-              ),
-            },
+            { key: "gl", header: "Monthly G/L", cell: (r) => <span className={(r.monthly_gl || 0) >= 0 ? "pos" : "neg"}>{money(r.monthly_gl)}</span> },
             { key: "close", header: "Close", cell: (r) => money(r.close_bal) },
           ]}
           rows={pnlAllRows}
@@ -421,9 +346,7 @@ export default function Home() {
         open={open.raw}
         onToggle={() => setOpen((s) => ({ ...s, raw: !s.raw }))}
       >
-        <pre className="code">
-          {JSON.stringify(data.raw, null, 2)}
-        </pre>
+        <pre className="code">{JSON.stringify(data.raw, null, 2)}</pre>
       </Section>
     </div>
   );
