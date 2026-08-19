@@ -184,7 +184,17 @@ export default function Home() {
         title="Portfolio Holdings"
         open={open.holdings}
         onToggle={() => setOpen((s) => ({ ...s, holdings: !s.holdings }))}
-        right={<Badge tone="neutral">Count: {formatInt(holdingsRows.length)}</Badge>}
+
+        right={
+          data.holdingsSummary && Object.keys(data.holdingsSummary).length > 0 ? (
+            <div 
+              className={`badge badge-${(data.holdingsSummary.total_gain_loss_amount || 0) >= 0 ? "good" : "bad"}`}
+              style={{ fontSize: "1.15rem", padding: "6px 16px", borderWidth: "2px", boxShadow: "0 4px 6px rgba(0,0,0,0.08)", letterSpacing: "0.5px" }}
+            >
+              Net diff: {money(data.holdingsSummary.total_gain_loss_amount)}
+            </div>
+          ) : null
+        }
       >
         {data.holdingsSummary && Object.keys(data.holdingsSummary).length > 0 ? (
           <div className="summaryRow">
@@ -274,10 +284,16 @@ export default function Home() {
         title="Current Month Dividends"
         open={open.dividends}
         onToggle={() => setOpen((s) => ({ ...s, dividends: !s.dividends }))}
+
         right={
-          <Badge tone="good">
-            Total: {money(data.totalDividends || 0)}
-          </Badge>
+          data.totalDividends? (
+            <div 
+              className={`badge badge-${(data.totalDividends || 0) >= 0 ? "good" : "bad"}`}
+              style={{ fontSize: "1.15rem", padding: "6px 16px", borderWidth: "2px", boxShadow: "0 4px 6px rgba(0,0,0,0.08)", letterSpacing: "0.5px" }}
+            >
+              Total Dividends: {money(data.totalDividends)}
+            </div>
+          ) : null
         }
       >
         <Table
@@ -297,11 +313,15 @@ export default function Home() {
         title="Current Month Profit & Loss"
         open={open.pnlCurrent}
         onToggle={() => setOpen((s) => ({ ...s, pnlCurrent: !s.pnlCurrent }))}
+
         right={
           data.currentMonthlyPnl ? (
-            <Badge tone={(data.currentMonthlyPnl.monthly_gl || 0) >= 0 ? "good" : "bad"}>
+            <div 
+            className={`badge badge-${(data.totalDividends || 0) >= 0 ? "good" : "bad"}`}
+            style={{ fontSize: "1.15rem", padding: "6px 16px", borderWidth: "2px", boxShadow: "0 4px 6px rgba(0,0,0,0.08)", letterSpacing: "0.5px" }}
+          >
               Monthly G/L: {money(data.currentMonthlyPnl.monthly_gl)}
-            </Badge>
+            </div>
           ) : null
         }
       >
