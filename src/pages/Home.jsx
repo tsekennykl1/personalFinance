@@ -142,6 +142,8 @@ export default function Home() {
     );
   }, [data.allMonthlyPnl]);
 
+  const pnlAllFirstRow = pnlAllRows?.[0] || null;
+
   return (
     <div className="page">
       <div className="topBar">
@@ -313,29 +315,54 @@ export default function Home() {
         title="Current Month Profit & Loss"
         open={open.pnlCurrent}
         onToggle={() => setOpen((s) => ({ ...s, pnlCurrent: !s.pnlCurrent }))}
-
         right={
-          data.currentMonthlyPnl ? (
-            <div 
-            className={`badge badge-${(data.totalDividends || 0) >= 0 ? "good" : "bad"}`}
-            style={{ fontSize: "1.15rem", padding: "6px 16px", borderWidth: "2px", boxShadow: "0 4px 6px rgba(0,0,0,0.08)", letterSpacing: "0.5px" }}
-          >
-              Monthly G/L: {money(data.currentMonthlyPnl.monthly_gl)}
+          pnlAllFirstRow ? (
+            <div
+              className={`badge badge-${(pnlAllFirstRow.monthly_gl || 0) >= 0 ? "good" : "bad"}`}
+              style={{
+                fontSize: "1.15rem",
+                padding: "6px 16px",
+                borderWidth: "2px",
+                boxShadow: "0 4px 6px rgba(0,0,0,0.08)",
+                letterSpacing: "0.5px",
+              }}
+            >
+              Monthly G/L: {money(pnlAllFirstRow.monthly_gl)}
             </div>
           ) : null
         }
       >
-        {data.currentMonthlyPnl ? (
+        {pnlAllFirstRow ? (
           <div className="kpiGrid">
-            <div className="kpi"><div className="muted">Open</div><div className="big">{money(data.currentMonthlyPnl.open_bal)}</div></div>
-            <div className="kpi"><div className="muted">Income</div><div className="big pos">{money(data.currentMonthlyPnl.income)}</div></div>
-            <div className="kpi"><div className="muted">Expenses</div><div className="big neg">{money(data.currentMonthlyPnl.expenses)}</div></div>
-            <div className="kpi"><div className="muted">Stock P&L</div><div className={`big ${(data.currentMonthlyPnl.stock_pnl || 0) >= 0 ? "pos" : "neg"}`}>{money(data.currentMonthlyPnl.stock_pnl)}</div></div>
-            <div className="kpi"><div className="muted">Dividend</div><div className="big pos">{money(data.currentMonthlyPnl.dividend)}</div></div>
-            <div className="kpi"><div className="muted">Close</div><div className="big">{money(data.currentMonthlyPnl.close_bal)}</div></div>
+            <div className="kpi">
+              <div className="muted">Open</div>
+              <div className="big">{money(pnlAllFirstRow.open_bal)}</div>
+            </div>
+            <div className="kpi">
+              <div className="muted">Income</div>
+              <div className="big pos">{money(pnlAllFirstRow.income)}</div>
+            </div>
+            <div className="kpi">
+              <div className="muted">Expenses</div>
+              <div className="big neg">{money(pnlAllFirstRow.expenses)}</div>
+            </div>
+            <div className="kpi">
+              <div className="muted">Stock P&amp;L</div>
+              <div className={`big ${(pnlAllFirstRow.stock_pnl || 0) >= 0 ? "pos" : "neg"}`}>
+                {money(pnlAllFirstRow.stock_pnl)}
+              </div>
+            </div>
+            <div className="kpi">
+              <div className="muted">Dividend</div>
+              <div className="big pos">{money(pnlAllFirstRow.dividend)}</div>
+            </div>
+            <div className="kpi">
+              <div className="muted">Close</div>
+              <div className="big">{money(pnlAllFirstRow.close_bal)}</div>
+            </div>
           </div>
         ) : (
-          <div className="muted">No current_monthly_pnl returned.</div>
+          <div className="muted">No pnl rows returned.</div>
         )}
       </Section>
 
@@ -354,7 +381,15 @@ export default function Home() {
             { key: "exp", header: "Expenses", cell: (r) => money(r.expenses) },
             { key: "stock", header: "Stock P&L", cell: (r) => money(r.stock_pnl) },
             { key: "div", header: "Dividend", cell: (r) => money(r.dividend) },
-            { key: "gl", header: "Monthly G/L", cell: (r) => <span className={(r.monthly_gl || 0) >= 0 ? "pos" : "neg"}>{money(r.monthly_gl)}</span> },
+            {
+              key: "gl",
+              header: "Monthly G/L",
+              cell: (r) => (
+                <span className={(r.monthly_gl || 0) >= 0 ? "pos" : "neg"}>
+                  {money(r.monthly_gl)}
+                </span>
+              ),
+            },
             { key: "close", header: "Close", cell: (r) => money(r.close_bal) },
           ]}
           rows={pnlAllRows}
