@@ -18,6 +18,22 @@ const TYPE_OPTIONS = [
   { value: "I", label: "Income" },
 ];
 
+// Helper: convert various date formats to YYYY-MM-DD for <input type="date">
+const parseDateToISO = (dateStr) => {
+  if (!dateStr) return "";
+  if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) return dateStr.slice(0, 10);
+  const slashParts = dateStr.split("/");
+  if (slashParts.length === 3) {
+    const [day, month, year] = slashParts;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    return d.toISOString().slice(0, 10);
+  }
+  return "";
+};
+
 export default function Ledger() {
   const [yearMonth, setYearMonth] = useState(() => {
     const d = new Date();
@@ -70,22 +86,32 @@ export default function Ledger() {
 
   const openAddModal = () => {
     setModalMode("add");
-    setForm({ ...EMPTY_FORM, ledger_datetime: `${yearMonth}-01` });
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    setForm({ ...EMPTY_FORM, transaction_date: today });
     setEditingId(null);
     setFormError("");
     setModalOpen(true);
   };
 
   const openEditModal = (row) => {
+    const id = row.id || row.entry_id || row.ledger_id || row._id;
+    if (!id) {
+      setError("Cannot edit: row has no ID field.");
+      return;
+    }
+
+    const rawDate = row.ledger_datetime || row.datetime || row.date || "";
+    const parsedDate = parseDateToISO(rawDate);
+
     setModalMode("edit");
     setForm({
       type: row.type || "E",
       category: row.category || "",
       amount: String(row.amount ?? ""),
-      ledger_datetime: row.datetime ? row.datetime.slice(0, 10) : "",
+      ledger_datetime: parsedDate,
       comment: row.comment || "",
     });
-    setEditingId(row.id);
+    setEditingId(id);
     setFormError("");
     setModalOpen(true);
   };
@@ -117,39 +143,68 @@ export default function Ledger() {
           comment: form.comment || undefined,
         };
       }
+
+      console.log("Submitting:", { resource_name: "ledger", action, payload });
+
       const res = await fetch(ENDPOINTS.CRUD, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resource_name: "ledger", action, payload }),
       });
+
+      const responseText = await res.text();
+      console.log("Response status:", res.status, "Body:", responseText);
+
+      let json;
+      try { json = JSON.parse(responseText); } catch (e) { json = {}; }
+
       if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || `HTTP ${res.status}`);
+        throw new Error(json.error || json.message || `HTTP ${res.status}: ${responseText}`);
       }
+
+      if (json.error) {
+        throw new Error(json.error);
+      }
+
       setModalOpen(false);
       fetchLedger();
     } catch (err) {
+      console.error("Submit error:", err);
       setFormError(err.message);
     }
     setSubmitting(false);
   };
 
   const handleDelete = async (id) => {
+    console.log("Deleting ledger ID:", id);
     try {
+      const body = JSON.stringify({
+        resource_name: "ledger",
+        action: "delete",
+        payload: { entry_id: id },
+      });
+      console.log("Delete payload:", body);
+
       const res = await fetch(ENDPOINTS.CRUD, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          resource_name: "ledger",
-          action: "delete",
-          payload: { entry_id: id },
-        }),
+        body,
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const responseText = await res.text();
+      console.log("Delete response:", res.status, responseText);
+
+      if (!res.ok) {
+        let json;
+        try { json = JSON.parse(responseText); } catch (e) { json = {}; }
+        throw new Error(json.error || json.message || `HTTP ${res.status}`);
+      }
+
       setDeleteConfirm(null);
       fetchLedger();
     } catch (err) {
-      setFormError(err.message);
+      console.error("Delete error:", err);
+      setError(`Delete failed: ${err.message}`);
       setDeleteConfirm(null);
     }
   };
@@ -163,26 +218,7 @@ export default function Ledger() {
   return (
     <div style={{ background: "#f6f7fb", minHeight: "100vh", padding: "18px" }}>
       <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-        {/* Back to Home */}
-        <a
-          href="/"
-          onClick={(e) => { e.preventDefault(); window.location.href = "/"; }}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "6px",
-            fontSize: "13px",
-            fontWeight: 700,
-            color: "#667",
-            textDecoration: "none",
-            marginBottom: "14px",
-            cursor: "pointer",
-          }}
-        >
-          <ArrowLeft size={14} /> Back to Home
-        </a>
-
-        {/* Top Bar */}
+        {/* Top Bar with Back Arrow on the right */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px", gap: "12px", flexWrap: "wrap" }}>
           <div>
             <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 800, color: "#111" }}>📒 Ledger</h1>
@@ -205,6 +241,25 @@ export default function Ledger() {
               style={{ display: "inline-flex", alignItems: "center", gap: "4px", border: "none", background: "#1f4fff", color: "#fff", padding: "8px 14px", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" }}
             >
               <Plus size={14} /> Add
+            </button>
+            <button
+              type="button"
+              onClick={() => { window.location.href = "/"; }}
+              title="Back to Home"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "36px",
+                height: "36px",
+                border: "1px solid #d2d7e6",
+                background: "#fff",
+                borderRadius: "10px",
+                cursor: "pointer",
+                color: "#445",
+              }}
+            >
+              <ArrowLeft size={18} />
             </button>
           </div>
         </div>

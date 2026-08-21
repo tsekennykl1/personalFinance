@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useCallback, Fragment } from "react";
-import { Dialog, Transition } from "@headlessui/react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Plus, Pencil, Trash2, X, Loader2, TrendingUp, TrendingDown, ArrowLeft } from "lucide-react";
 
 const ENDPOINTS = {
@@ -8,11 +7,40 @@ const ENDPOINTS = {
 
 const EMPTY_FORM = {
   symbol: "",
+  market: ".HK",
   type: "BUY",
   quantity: "",
   price: "",
   notes: "",
   transaction_date: "",
+};
+
+// Helper: convert various date formats to YYYY-MM-DD for <input type="date">
+const parseDateToISO = (dateStr) => {
+  if (!dateStr) return "";
+  if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) return dateStr.slice(0, 10);
+  const slashParts = dateStr.split("/");
+  if (slashParts.length === 3) {
+    const [day, month, year] = slashParts;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  return "";
+};
+
+// Helper: validate and normalize HK symbol (must be 1-4 digits, padded to 4)
+const validateAndNormalizeHKSymbol = (raw) => {
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    return { error: "Hong Kong symbol must contain only digits (e.g. 5, 700, 2628, 9988)" };
+  }
+  if (trimmed.length > 4) {
+    return { error: "Hong Kong symbol must be at most 4 digits" };
+  }
+  // Pad to 4 digits
+  const padded = trimmed.padStart(4, "0");
+  return { symbol: padded };
 };
 
 export default function Transactions() {
@@ -65,25 +93,41 @@ export default function Transactions() {
     return () => ctrl.abort();
   }, [fetchTransactions]);
 
+
   const openAddModal = () => {
     setModalMode("add");
-    setForm({ ...EMPTY_FORM, transaction_date: `${yearMonth}-01` });
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    setForm({ ...EMPTY_FORM, transaction_date: today });
     setEditingId(null);
     setFormError("");
     setModalOpen(true);
   };
 
   const openEditModal = (row) => {
+    const id = row.id || row.transaction_id || row._id;
+    if (!id) {
+      setError("Cannot edit: row has no ID field.");
+      return;
+    }
+
+    const rawDate = row.transaction_date || row.date || "";
+    const parsedDate = parseDateToISO(rawDate);
+
+    const symbol = row.symbol || "";
+    const isHK = symbol.toUpperCase().endsWith(".HK");
+    const baseSymbol = isHK ? symbol.slice(0, -3) : symbol;
+
     setModalMode("edit");
     setForm({
-      symbol: row.symbol || "",
+      symbol: baseSymbol,
+      market: isHK ? ".HK" : "",
       type: row.type || "BUY",
       quantity: String(row.quantity ?? ""),
       price: String(row.price ?? ""),
       notes: row.notes || "",
-      transaction_date: row.transaction_date ? row.transaction_date.slice(0, 10) : "",
+      transaction_date: parsedDate,
     });
-    setEditingId(row.id);
+    setEditingId(id);
     setFormError("");
     setModalOpen(true);
   };
@@ -94,11 +138,26 @@ export default function Transactions() {
     setSubmitting(true);
     setFormError("");
     try {
+      // Build the final symbol with market suffix
+      let finalSymbol = form.symbol.toUpperCase().trim();
+
+      if (modalMode === "add") {
+        if (form.market === ".HK") {
+          const result = validateAndNormalizeHKSymbol(finalSymbol);
+          if (result.error) {
+            setFormError(result.error);
+            setSubmitting(false);
+            return;
+          }
+          finalSymbol = result.symbol + ".HK";
+        }
+      }
+
       let payload, action;
       if (modalMode === "add") {
         action = "insert";
         payload = {
-          symbol: form.symbol.toUpperCase(),
+          symbol: finalSymbol,
           type: form.type,
           quantity: parseFloat(form.quantity),
           price: parseFloat(form.price),
@@ -116,24 +175,39 @@ export default function Transactions() {
           transaction_date: form.transaction_date || undefined,
         };
       }
+
+      console.log("Submitting:", { resource_name: "transaction", action, payload });
+
       const res = await fetch(ENDPOINTS.CRUD, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resource_name: "transaction", action, payload }),
       });
+
+      const responseText = await res.text();
+      console.log("Response status:", res.status, "Body:", responseText);
+
+      let json;
+      try { json = JSON.parse(responseText); } catch (e) { json = {}; }
+
       if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || `HTTP ${res.status}`);
+        throw new Error(json.error || json.message || `HTTP ${res.status}: ${responseText}`);
       }
+      if (json.error) {
+        throw new Error(json.error);
+      }
+
       setModalOpen(false);
       fetchTransactions();
     } catch (err) {
+      console.error("Submit error:", err);
       setFormError(err.message);
     }
     setSubmitting(false);
   };
 
   const handleDelete = async (id) => {
+    console.log("Deleting transaction ID:", id);
     try {
       const res = await fetch(ENDPOINTS.CRUD, {
         method: "POST",
@@ -144,11 +218,21 @@ export default function Transactions() {
           payload: { transaction_id: id },
         }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const responseText = await res.text();
+      console.log("Delete response:", res.status, responseText);
+
+      if (!res.ok) {
+        let json;
+        try { json = JSON.parse(responseText); } catch (e) { json = {}; }
+        throw new Error(json.error || json.message || `HTTP ${res.status}`);
+      }
+
       setDeleteConfirm(null);
       fetchTransactions();
     } catch (err) {
-      setFormError(err.message);
+      console.error("Delete error:", err);
+      setError(`Delete failed: ${err.message}`);
       setDeleteConfirm(null);
     }
   };
@@ -162,24 +246,6 @@ export default function Transactions() {
   return (
     <div style={{ background: "#f6f7fb", minHeight: "100vh", padding: "18px" }}>
       <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-        {/* Back to Home */}
-        <a
-          href="/"
-          onClick={(e) => { e.preventDefault(); window.location.href = "/"; }}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "6px",
-            fontSize: "13px",
-            fontWeight: 700,
-            color: "#667",
-            textDecoration: "none",
-            marginBottom: "14px",
-            cursor: "pointer",
-          }}
-        >
-          <ArrowLeft size={14} /> Back to Home
-        </a>
 
         {/* Top Bar */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px", gap: "12px", flexWrap: "wrap" }}>
@@ -210,6 +276,14 @@ export default function Transactions() {
               style={{ display: "inline-flex", alignItems: "center", gap: "4px", border: "none", background: "#1f4fff", color: "#fff", padding: "8px 14px", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" }}
             >
               <Plus size={14} /> Add
+            </button>
+            <button
+              type="button"
+              onClick={() => { window.location.href = "/"; }}
+              title="Back to Home"
+              style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "36px", height: "36px", border: "1px solid #d2d7e6", background: "#fff", borderRadius: "10px", cursor: "pointer", color: "#667" }}
+            >
+              <ArrowLeft size={16} />
             </button>
           </div>
         </div>
@@ -300,13 +374,6 @@ export default function Transactions() {
                     </tr>
                   ))}
                 </tbody>
-                <tfoot>
-                  <tr style={{ background: "#fafbff" }}>
-                    <td colSpan={4} style={{ padding: "10px", fontSize: "13px", fontWeight: 800, textAlign: "right" }}>Total:</td>
-                    <td style={{ padding: "10px", fontSize: "13px", fontWeight: 900, textAlign: "right" }}>${totalAmount.toFixed(2)}</td>
-                    <td colSpan={4}></td>
-                  </tr>
-                </tfoot>
               </table>
             )}
           </div>
@@ -340,18 +407,39 @@ export default function Transactions() {
               )}
 
               <form onSubmit={handleSubmit}>
-                <div style={{ marginBottom: "12px" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#445", marginBottom: "4px" }}>Symbol *</label>
-                  <input
-                    type="text"
-                    required={modalMode === "add"}
-                    disabled={modalMode === "edit"}
-                    value={form.symbol}
-                    onChange={(e) => updateField("symbol", e.target.value)}
-                    placeholder="e.g. 0005.HK"
-                    style={{ width: "100%", padding: "8px 10px", border: "1px solid #d2d7e6", borderRadius: "8px", fontSize: "13px", boxSizing: "border-box", opacity: modalMode === "edit" ? 0.5 : 1 }}
-                  />
+                {/* Symbol + Market Row */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#445", marginBottom: "4px" }}>Symbol *</label>
+                    <input
+                      type="text"
+                      required={modalMode === "add"}
+                      disabled={modalMode === "edit"}
+                      value={form.symbol}
+                      onChange={(e) => updateField("symbol", e.target.value)}
+                      placeholder={form.market === ".HK" ? "e.g. 5, 700, 2628" : "e.g. AAPL"}
+                      style={{ width: "100%", padding: "8px 10px", border: "1px solid #d2d7e6", borderRadius: "8px", fontSize: "13px", boxSizing: "border-box", background: modalMode === "edit" ? "#f5f5f5" : "#fff", opacity: modalMode === "edit" ? 0.6 : 1 }}
+                    />
+                    {form.market === ".HK" && form.symbol.trim() && modalMode === "add" && (
+                      <div style={{ fontSize: "11px", color: "#667", marginTop: "3px" }}>
+                        Will submit as: <strong>{form.symbol.trim().padStart(4, "0")}.HK</strong>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#445", marginBottom: "4px" }}>Market *</label>
+                    <select
+                      value={form.market}
+                      onChange={(e) => updateField("market", e.target.value)}
+                      disabled={modalMode === "edit"}
+                      style={{ width: "100%", padding: "8px 10px", border: "1px solid #d2d7e6", borderRadius: "8px", fontSize: "13px", boxSizing: "border-box", background: modalMode === "edit" ? "#f5f5f5" : "#fff", opacity: modalMode === "edit" ? 0.6 : 1 }}
+                    >
+                      <option value=".HK">Hong Kong (.HK)</option>
+                      <option value="">US / Other</option>
+                    </select>
+                  </div>
                 </div>
+
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginBottom: "12px" }}>
                   <div>
                     <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#445", marginBottom: "4px" }}>Type *</label>

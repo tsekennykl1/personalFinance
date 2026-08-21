@@ -7,9 +7,40 @@ const ENDPOINTS = {
 
 const EMPTY_FORM = {
   symbol: "",
+  market: ".HK",
   amount_per_share: "",
   quantity: "",
   payment_date: "",
+};
+
+// Helper: convert various date formats to YYYY-MM-DD for <input type="date">
+const parseDateToISO = (dateStr) => {
+  if (!dateStr) return "";
+  if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) return dateStr.slice(0, 10);
+  const slashParts = dateStr.split("/");
+  if (slashParts.length === 3) {
+    const [day, month, year] = slashParts;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    return d.toISOString().slice(0, 10);
+  }
+  return "";
+};
+
+// Helper: validate and normalize HK symbol (must be 1-4 digits, padded to 4)
+const validateAndNormalizeHKSymbol = (raw) => {
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    return { error: "Hong Kong symbol must contain only digits (e.g. 5, 700, 2628, 9988)" };
+  }
+  if (trimmed.length > 4) {
+    return { error: "Hong Kong symbol must be at most 4 digits" };
+  }
+  // Pad to 4 digits
+  const padded = trimmed.padStart(4, "0");
+  return { symbol: padded };
 };
 
 export default function Dividends() {
@@ -71,14 +102,33 @@ export default function Dividends() {
   };
 
   const openEditModal = (row) => {
+    const id = row.id || row.dividend_id || row._id;
+    console.log("Editing dividend row:", row);
+    console.log("Resolved ID:", id);
+
+    if (!id) {
+      setError("Cannot edit: row has no ID field. Check API response structure.");
+      return;
+    }
+
+    // Parse date
+    const rawDate = row.payment_date || row.date || "";
+    const parsedDate = parseDateToISO(rawDate);
+
+    // Determine market from existing symbol
+    const symbol = row.symbol || "";
+    const isHK = symbol.toUpperCase().endsWith(".HK");
+    const baseSymbol = isHK ? symbol.slice(0, -3) : symbol;
+
     setModalMode("edit");
     setForm({
-      symbol: row.symbol || "",
+      symbol: baseSymbol,
+      market: isHK ? ".HK" : "",
       amount_per_share: String(row.amount_per_share ?? ""),
       quantity: String(row.quantity ?? ""),
-      payment_date: row.payment_date ? row.payment_date.slice(0, 10) : "",
+      payment_date: parsedDate,
     });
-    setEditingId(row.id);
+    setEditingId(id);
     setFormError("");
     setModalOpen(true);
   };
@@ -89,11 +139,26 @@ export default function Dividends() {
     setSubmitting(true);
     setFormError("");
     try {
+      // Build the final symbol with market suffix
+      let finalSymbol = form.symbol.toUpperCase().trim();
+
+      if (modalMode === "add") {
+        if (form.market === ".HK") {
+          const result = validateAndNormalizeHKSymbol(finalSymbol);
+          if (result.error) {
+            setFormError(result.error);
+            setSubmitting(false);
+            return;
+          }
+          finalSymbol = result.symbol + ".HK";
+        }
+      }
+
       let payload, action;
       if (modalMode === "add") {
         action = "insert";
         payload = {
-          symbol: form.symbol.toUpperCase(),
+          symbol: finalSymbol,
           amount_per_share: parseFloat(form.amount_per_share),
           quantity: parseFloat(form.quantity),
           payment_date: form.payment_date || undefined,
@@ -107,39 +172,68 @@ export default function Dividends() {
           payment_date: form.payment_date || undefined,
         };
       }
+
+      console.log("Submitting:", { resource_name: "dividend", action, payload });
+
       const res = await fetch(ENDPOINTS.CRUD, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resource_name: "dividend", action, payload }),
       });
+
+      const responseText = await res.text();
+      console.log("Response status:", res.status, "Body:", responseText);
+
+      let json;
+      try { json = JSON.parse(responseText); } catch (e) { json = {}; }
+
       if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || `HTTP ${res.status}`);
+        throw new Error(json.error || json.message || `HTTP ${res.status}: ${responseText}`);
       }
+
+      if (json.error) {
+        throw new Error(json.error);
+      }
+
       setModalOpen(false);
       fetchDividends();
     } catch (err) {
+      console.error("Submit error:", err);
       setFormError(err.message);
     }
     setSubmitting(false);
   };
 
   const handleDelete = async (id) => {
+    console.log("Deleting dividend ID:", id);
     try {
+      const body = JSON.stringify({
+        resource_name: "dividend",
+        action: "delete",
+        payload: { dividend_id: id },
+      });
+      console.log("Delete payload:", body);
+
       const res = await fetch(ENDPOINTS.CRUD, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          resource_name: "dividend",
-          action: "delete",
-          payload: { dividend_id: id },
-        }),
+        body,
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const responseText = await res.text();
+      console.log("Delete response:", res.status, responseText);
+
+      if (!res.ok) {
+        let json;
+        try { json = JSON.parse(responseText); } catch (e) { json = {}; }
+        throw new Error(json.error || json.message || `HTTP ${res.status}`);
+      }
+
       setDeleteConfirm(null);
       fetchDividends();
     } catch (err) {
-      setFormError(err.message);
+      console.error("Delete error:", err);
+      setError(`Delete failed: ${err.message}`);
       setDeleteConfirm(null);
     }
   };
@@ -152,26 +246,7 @@ export default function Dividends() {
   return (
     <div style={{ background: "#f6f7fb", minHeight: "100vh", padding: "18px" }}>
       <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-        {/* Back to Home */}
-        <a
-          href="/"
-          onClick={(e) => { e.preventDefault(); window.location.href = "/"; }}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "6px",
-            fontSize: "13px",
-            fontWeight: 700,
-            color: "#667",
-            textDecoration: "none",
-            marginBottom: "14px",
-            cursor: "pointer",
-          }}
-        >
-          <ArrowLeft size={14} /> Back to Home
-        </a>
-
-        {/* Top Bar */}
+        {/* Top Bar with Back Arrow on the right */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px", gap: "12px", flexWrap: "wrap" }}>
           <div>
             <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 800, color: "#111" }}>💰 Dividends</h1>
@@ -197,6 +272,25 @@ export default function Dividends() {
               style={{ display: "inline-flex", alignItems: "center", gap: "4px", border: "none", background: "#1f4fff", color: "#fff", padding: "8px 14px", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" }}
             >
               <Plus size={14} /> Add
+            </button>
+            <button
+              type="button"
+              onClick={() => { window.location.href = "/"; }}
+              title="Back to Home"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "36px",
+                height: "36px",
+                border: "1px solid #d2d7e6",
+                background: "#fff",
+                borderRadius: "10px",
+                cursor: "pointer",
+                color: "#445",
+              }}
+            >
+              <ArrowLeft size={18} />
             </button>
           </div>
         </div>
@@ -239,7 +333,7 @@ export default function Dividends() {
             ) : rows.length === 0 ? (
               <div style={{ textAlign: "center", color: "#667", padding: "48px 0", fontSize: "14px" }}>No dividend records for {yearMonth}</div>
             ) : (
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "700px", background: "#fff" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "700px", background: "#fff" }}>
                 <thead>
                   <tr>
                     <th style={{ padding: "10px", borderBottom: "1px solid #eef0f6", textAlign: "left", fontSize: "12px", color: "#445", background: "#fafbff", whiteSpace: "nowrap" }}>Symbol</th>
@@ -313,18 +407,39 @@ export default function Dividends() {
               )}
 
               <form onSubmit={handleSubmit}>
-                <div style={{ marginBottom: "12px" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#445", marginBottom: "4px" }}>Symbol *</label>
-                  <input
-                    type="text"
-                    required={modalMode === "add"}
-                    disabled={modalMode === "edit"}
-                    value={form.symbol}
-                    onChange={(e) => updateField("symbol", e.target.value)}
-                    placeholder="e.g. 0005.HK"
-                    style={{ width: "100%", padding: "8px 10px", border: "1px solid #d2d7e6", borderRadius: "8px", fontSize: "13px", boxSizing: "border-box", opacity: modalMode === "edit" ? 0.5 : 1 }}
-                  />
+                {/* Symbol + Market Row */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#445", marginBottom: "4px" }}>Symbol *</label>
+                    <input
+                      type="text"
+                      required={modalMode === "add"}
+                      disabled={modalMode === "edit"}
+                      value={form.symbol}
+                      onChange={(e) => updateField("symbol", e.target.value)}
+                      placeholder={form.market === ".HK" ? "e.g. 5, 700, 2628" : "e.g. AAPL"}
+                      style={{ width: "100%", padding: "8px 10px", border: "1px solid #d2d7e6", borderRadius: "8px", fontSize: "13px", boxSizing: "border-box", background: modalMode === "edit" ? "#f5f5f5" : "#fff", opacity: modalMode === "edit" ? 0.6 : 1 }}
+                    />
+                    {form.market === ".HK" && form.symbol.trim() && modalMode === "add" && (
+                      <div style={{ fontSize: "11px", color: "#667", marginTop: "3px" }}>
+                        Will submit as: <strong>{form.symbol.trim().padStart(4, "0")}.HK</strong>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#445", marginBottom: "4px" }}>Market *</label>
+                    <select
+                      value={form.market}
+                      onChange={(e) => updateField("market", e.target.value)}
+                      disabled={modalMode === "edit"}
+                      style={{ width: "100%", padding: "8px 10px", border: "1px solid #d2d7e6", borderRadius: "8px", fontSize: "13px", boxSizing: "border-box", background: modalMode === "edit" ? "#f5f5f5" : "#fff", opacity: modalMode === "edit" ? 0.6 : 1 }}
+                    >
+                      <option value=".HK">Hong Kong (.HK)</option>
+                      <option value="">US / Other</option>
+                    </select>
+                  </div>
                 </div>
+
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
                   <div>
                     <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#445", marginBottom: "4px" }}>Amount/Share *</label>
