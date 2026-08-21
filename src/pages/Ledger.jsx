@@ -86,8 +86,8 @@ export default function Ledger() {
 
   const openAddModal = () => {
     setModalMode("add");
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    setForm({ ...EMPTY_FORM, transaction_date: today });
+    const today = new Date().toISOString().slice(0, 10);
+    setForm({ ...EMPTY_FORM, ledger_datetime: today });
     setEditingId(null);
     setFormError("");
     setModalOpen(true);
@@ -101,7 +101,7 @@ export default function Ledger() {
     }
 
     const rawDate = row.ledger_datetime || row.datetime || row.date || "";
-    const parsedDate = parseDateToISO(rawDate);
+    const parsedDate = parseDateToISO(rawDate) || new Date().toISOString().slice(0, 10);
 
     setModalMode("edit");
     setForm({
@@ -144,8 +144,6 @@ export default function Ledger() {
         };
       }
 
-      console.log("Submitting:", { resource_name: "ledger", action, payload });
-
       const res = await fetch(ENDPOINTS.CRUD, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -153,8 +151,6 @@ export default function Ledger() {
       });
 
       const responseText = await res.text();
-      console.log("Response status:", res.status, "Body:", responseText);
-
       let json;
       try { json = JSON.parse(responseText); } catch (e) { json = {}; }
 
@@ -176,14 +172,12 @@ export default function Ledger() {
   };
 
   const handleDelete = async (id) => {
-    console.log("Deleting ledger ID:", id);
     try {
       const body = JSON.stringify({
         resource_name: "ledger",
         action: "delete",
         payload: { entry_id: id },
       });
-      console.log("Delete payload:", body);
 
       const res = await fetch(ENDPOINTS.CRUD, {
         method: "POST",
@@ -192,7 +186,6 @@ export default function Ledger() {
       });
 
       const responseText = await res.text();
-      console.log("Delete response:", res.status, responseText);
 
       if (!res.ok) {
         let json;
@@ -213,12 +206,21 @@ export default function Ledger() {
 
   const incomeTotal = rows.filter((r) => r.type === "I").reduce((s, r) => s + parseFloat(r.amount || 0), 0);
   const expenseTotal = rows.filter((r) => r.type === "E").reduce((s, r) => s + parseFloat(r.amount || 0), 0);
-  const net = incomeTotal - expenseTotal;
+
+  // FIX #1: Net = Income + Expenses (expenses are already negative)
+  const net = incomeTotal + expenseTotal;
+
+  // FIX #4: Sort rows by date Ascending
+  const sortedRows = [...rows].sort((a, b) => {
+    const dateA = a.datetime || a.ledger_datetime || "";
+    const dateB = b.datetime || b.ledger_datetime || "";
+    return dateA.localeCompare(dateB);
+  });
 
   return (
     <div style={{ background: "#f6f7fb", minHeight: "100vh", padding: "18px" }}>
       <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-        {/* Top Bar with Back Arrow on the right */}
+        {/* Top Bar — FIX #2: +Add button removed from here */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px", gap: "12px", flexWrap: "wrap" }}>
           <div>
             <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 800, color: "#111" }}>📒 Ledger</h1>
@@ -235,13 +237,6 @@ export default function Ledger() {
               onChange={(e) => setYearMonth(e.target.value)}
               style={{ border: "1px solid #d2d7e6", background: "#fff", padding: "8px 10px", borderRadius: "10px", fontWeight: 700, fontSize: "13px" }}
             />
-            <button
-              type="button"
-              onClick={openAddModal}
-              style={{ display: "inline-flex", alignItems: "center", gap: "4px", border: "none", background: "#1f4fff", color: "#fff", padding: "8px 14px", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" }}
-            >
-              <Plus size={14} /> Add
-            </button>
             <button
               type="button"
               onClick={() => { window.location.href = "/"; }}
@@ -265,7 +260,7 @@ export default function Ledger() {
         </div>
 
         {/* KPI Summary */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "10px", marginBottom: "12px" }}>
+        <div className="kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "10px", marginBottom: "12px" }}>
           <div style={{ border: "1px solid #eef0f6", borderRadius: "12px", padding: "12px", background: "#fff" }}>
             <div style={{ color: "#667", fontSize: "12px", fontWeight: 700 }}>Income</div>
             <div style={{ fontSize: "18px", fontWeight: 900, marginTop: "5px", color: "#146c2e" }}>${incomeTotal.toFixed(2)}</div>
@@ -275,7 +270,7 @@ export default function Ledger() {
             <div style={{ fontSize: "18px", fontWeight: 900, marginTop: "5px", color: "#b02020" }}>${expenseTotal.toFixed(2)}</div>
           </div>
           <div style={{ border: "1px solid #eef0f6", borderRadius: "12px", padding: "12px", background: "#fff" }}>
-            <div style={{ color: "#667", fontSize: "12px", fontWeight: 700 }}>Net</div>
+            <div style={{ color: "#667", fontSize: "12px", fontWeight: 700 }}>Net Amount</div>
             <div style={{ fontSize: "18px", fontWeight: 900, marginTop: "5px", color: net >= 0 ? "#146c2e" : "#b02020" }}>${net.toFixed(2)}</div>
           </div>
         </div>
@@ -290,32 +285,42 @@ export default function Ledger() {
 
         {/* Table Card */}
         <div style={{ background: "#fff", border: "1px solid #e6e8f0", borderRadius: "12px", overflow: "hidden" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", borderBottom: "1px solid #eef0f6" }}>
-            <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 800 }}>Ledger Entries</h3>
-            <span style={{ color: "#667", fontSize: "12px", fontWeight: 700 }}>{yearMonth}</span>
+          {/* FIX #2: +Add button moved here to far-right of Ledger Entries row */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", borderBottom: "1px solid #eef0f6", flexWrap: "wrap", gap: "8px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 800 }}>Ledger Entries</h3>
+              <span style={{ color: "#667", fontSize: "12px", fontWeight: 700 }}>{yearMonth}</span>
+            </div>
+            <button
+              type="button"
+              onClick={openAddModal}
+              style={{ display: "inline-flex", alignItems: "center", gap: "4px", border: "none", background: "#1f4fff", color: "#fff", padding: "8px 14px", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" }}
+            >
+              <Plus size={14} /> Add
+            </button>
           </div>
           <div style={{ overflow: "auto" }}>
             {loading ? (
               <div style={{ display: "flex", justifyContent: "center", padding: "48px 0" }}>
                 <Loader2 size={28} style={{ animation: "spin 1s linear infinite", color: "#1f4fff" }} />
               </div>
-            ) : rows.length === 0 ? (
+            ) : sortedRows.length === 0 ? (
               <div style={{ textAlign: "center", color: "#667", padding: "48px 0", fontSize: "14px" }}>No ledger entries for {yearMonth}</div>
             ) : (
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "700px", background: "#fff" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "600px", background: "#fff" }}>
                 <thead>
                   <tr>
+                    {/* FIX #3: Reordered — Type, Date, Category, Amount, Comment, Actions (Month removed) */}
                     <th style={{ padding: "10px", borderBottom: "1px solid #eef0f6", textAlign: "center", fontSize: "12px", color: "#445", background: "#fafbff", whiteSpace: "nowrap" }}>Type</th>
+                    <th style={{ padding: "10px", borderBottom: "1px solid #eef0f6", textAlign: "left", fontSize: "12px", color: "#445", background: "#fafbff", whiteSpace: "nowrap" }}>Date</th>
                     <th style={{ padding: "10px", borderBottom: "1px solid #eef0f6", textAlign: "left", fontSize: "12px", color: "#445", background: "#fafbff", whiteSpace: "nowrap" }}>Category</th>
                     <th style={{ padding: "10px", borderBottom: "1px solid #eef0f6", textAlign: "right", fontSize: "12px", color: "#445", background: "#fafbff", whiteSpace: "nowrap" }}>Amount</th>
-                    <th style={{ padding: "10px", borderBottom: "1px solid #eef0f6", textAlign: "left", fontSize: "12px", color: "#445", background: "#fafbff", whiteSpace: "nowrap" }}>Date</th>
-                    <th style={{ padding: "10px", borderBottom: "1px solid #eef0f6", textAlign: "left", fontSize: "12px", color: "#445", background: "#fafbff", whiteSpace: "nowrap" }}>Month</th>
-                    <th style={{ padding: "10px", borderBottom: "1px solid #eef0f6", textAlign: "left", fontSize: "12px", color: "#445", background: "#fafbff", whiteSpace: "nowrap" }}>Comment</th>
+                    <th className="comment-col" style={{ padding: "10px", borderBottom: "1px solid #eef0f6", textAlign: "left", fontSize: "12px", color: "#445", background: "#fafbff", whiteSpace: "nowrap" }}>Comment</th>
                     <th style={{ padding: "10px", borderBottom: "1px solid #eef0f6", textAlign: "center", fontSize: "12px", color: "#445", background: "#fafbff", whiteSpace: "nowrap" }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => (
+                  {sortedRows.map((row) => (
                     <tr key={row.id}>
                       <td style={{ padding: "10px", borderBottom: "1px solid #eef0f6", fontSize: "13px", textAlign: "center" }}>
                         <span style={{
@@ -327,13 +332,14 @@ export default function Ledger() {
                           {row.type === "I" ? "Income" : "Expense"}
                         </span>
                       </td>
+                      {/* FIX #3: Date moved to 2nd column */}
+                      <td style={{ padding: "10px", borderBottom: "1px solid #eef0f6", fontSize: "13px", whiteSpace: "nowrap" }}>{row.datetime ? row.datetime.slice(0, 10) : "-"}</td>
                       <td style={{ padding: "10px", borderBottom: "1px solid #eef0f6", fontSize: "13px", fontWeight: 700 }}>{row.category}</td>
-                      <td style={{ padding: "10px", borderBottom: "1px solid #eef0f6", fontSize: "13px", textAlign: "right", fontWeight: 800, color: row.type === "I" ? "#146c2e" : "#b02020" }}>
+                      <td style={{ padding: "10px", borderBottom: "1px solid #eef0f6", fontSize: "13px", textAlign: "right", fontWeight: 800, color: row.type === "I" ? "#146c2e" : "#b02020", whiteSpace: "nowrap" }}>
                         ${parseFloat(row.amount).toFixed(2)}
                       </td>
-                      <td style={{ padding: "10px", borderBottom: "1px solid #eef0f6", fontSize: "13px" }}>{row.datetime ? row.datetime.slice(0, 10) : "-"}</td>
-                      <td style={{ padding: "10px", borderBottom: "1px solid #eef0f6", fontSize: "13px", color: "#667" }}>{row.month_str}</td>
-                      <td style={{ padding: "10px", borderBottom: "1px solid #eef0f6", fontSize: "13px", color: "#667", maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.comment || "-"}</td>
+                      {/* FIX #5: More display space for Comment */}
+                      <td className="comment-col" style={{ padding: "10px", borderBottom: "1px solid #eef0f6", fontSize: "13px", color: "#667", minWidth: "200px", maxWidth: "350px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.comment || "-"}</td>
                       <td style={{ padding: "10px", borderBottom: "1px solid #eef0f6", fontSize: "13px", textAlign: "center" }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
                           <button type="button" onClick={() => openEditModal(row)} style={{ background: "none", border: "none", cursor: "pointer", color: "#1f4fff", padding: "4px" }} title="Edit">
@@ -425,14 +431,15 @@ export default function Ledger() {
                     />
                   </div>
                 </div>
+                {/* FIX #5: Full-width textarea for Comment with more space */}
                 <div style={{ marginBottom: "16px" }}>
                   <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#445", marginBottom: "4px" }}>Comment</label>
-                  <input
-                    type="text"
+                  <textarea
                     value={form.comment}
                     onChange={(e) => updateField("comment", e.target.value)}
                     placeholder="Optional comment"
-                    style={{ width: "100%", padding: "8px 10px", border: "1px solid #d2d7e6", borderRadius: "8px", fontSize: "13px", boxSizing: "border-box" }}
+                    rows={3}
+                    style={{ width: "100%", padding: "8px 10px", border: "1px solid #d2d7e6", borderRadius: "8px", fontSize: "13px", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit" }}
                   />
                 </div>
                 <button
@@ -480,7 +487,27 @@ export default function Ledger() {
         </div>
       )}
 
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      {/* FIX #6: Responsive styles */}
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        @media (max-width: 768px) {
+          .kpi-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .comment-col {
+            min-width: 120px !important;
+            max-width: 180px !important;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .kpi-grid {
+            grid-template-columns: 1fr !important;
+            gap: 6px !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
