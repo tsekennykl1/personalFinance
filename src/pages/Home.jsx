@@ -266,7 +266,7 @@ export default function Home() {
               <div className="big">{money(data.monthlyPerformanceTotals.total_current_value)}</div>
             </div>
             <div className="summaryItem">
-              <div className="muted">Realized G/L</div>
+              <div className="muted">Realized Gain/Loss</div>
               <div className={`big ${(data.monthlyPerformanceTotals.total_realized_gl || 0) >= 0 ? "pos" : "neg"}`}>
                 {money(data.monthlyPerformanceTotals.total_realized_gl)}
               </div>
@@ -283,8 +283,8 @@ export default function Home() {
               { key: "sp", header: "S-Price", cell: (r) => formatNumber(r.start_price, { decimals: 2 }) },
               { key: "aq", header: "Adj-Qty", cell: (r) => <span style={{ fontWeight: r.adjusted_qty !== r.start_qty ? 700 : "normal" }}>{formatInt(r.adjusted_qty)}</span> },
               { key: "cp", header: "Price", cell: (r) => formatNumber(r.current_price, { decimals: 2 }) },
-              { key: "rg", header: "Realized G/L", cell: (r) => <span className={(r.realized_gl || 0) >= 0 ? "pos" : "neg"}>{money(r.realized_gl)}</span> },
-              { key: "diff", header: "Month Net Diff", cell: (r) => <span className={(r.month_net_diff || 0) >= 0 ? "pos" : "neg"}>{money(r.month_net_diff)}</span> },
+              { key: "rg", header: "PnL", cell: (r) => <span className={(r.realized_gl || 0) >= 0 ? "pos" : "neg"}>{money(r.realized_gl)}</span> },
+              { key: "diff", header: "Net Diff", cell: (r) => <span className={(r.month_net_diff || 0) >= 0 ? "pos" : "neg"}>{money(r.month_net_diff)}</span> },
               { key: "cv", header: "Current Value", cell: (r) => money(r.current_value) },
               { key: "sv", header: "Start Value", cell: (r) => money(r.start_value) },
             ]}
@@ -320,9 +320,9 @@ export default function Home() {
               { key: "symbol", header: "Code", cell: (r) => stripHKSuffix(r.symbol) || "—" },
               { key: "name", header: "Stock Name", cell: (r) => <span className="stock-name-cell">{r.stock_name || r.shortName_en || "—"}</span> },              
               { key: "quantity", header: "Quantity", cell: (r) => formatInt(r.quantity) },
-              { key: "aps", header: "Amount/Share", cell: (r) => formatNumber(r.amount_per_share, { decimals: 4 }) },
+              { key: "aps", header: "per share", cell: (r) => formatNumber(r.amount_per_share, { decimals: 4 }) },
+              { key: "amount", header: "Amount", cell: (r) => <span className="pos">{money(r.dividend_amount)}</span> },
               { key: "exdate", header: "Ex-Div Date", cell: (r) => r.ex_dividend_date || "—" },
-              { key: "amount", header: "Div Amount", cell: (r) => <span className="pos">{money(r.dividend_amount)}</span> },
               // FIX #4: Spacer column to push content left
               { key: "_spacer", header: "", cell: () => "" },
             ]}
