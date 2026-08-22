@@ -221,8 +221,6 @@ export default function Home() {
                   return <span style={style}>{formatNumber(r.current_price, { decimals: 2 })} {pctStr && <span>{pctStr}</span>}</span>;
                 },
               },
-              { key: "invested", header: "Invested", cell: (r) => money(r.total_invested) },
-              { key: "value", header: "Current Value", cell: (r) => money(r.current_value) },
               {
                 key: "gl", header: "G/L", cell: (r) => (
                   <span className={(r.gain_loss_amount || 0) >= 0 ? "pos" : "neg"}>
@@ -230,6 +228,9 @@ export default function Home() {
                   </span>
                 ),
               },
+              { key: "invested", header: "Invested", cell: (r) => money(r.total_invested) },
+              { key: "value", header: "Current Value", cell: (r) => money(r.current_value) },
+
             ]}
             rows={holdingsRows}
           />
@@ -275,14 +276,14 @@ export default function Home() {
             keyFn={(r) => r.symbol}
             columns={[
               { key: "symbol", header: "Symbol", cell: (r) => r.symbol || "—" },
-              { key: "sq", header: "Start Qty", cell: (r) => formatInt(r.start_qty) },
-              { key: "sv", header: "Start Value", cell: (r) => money(r.start_value) },
-              { key: "sp", header: "Start Price", cell: (r) => formatNumber(r.start_price, { decimals: 2 }) },
-              { key: "aq", header: "Adjusted Qty", cell: (r) => <span style={{ fontWeight: r.adjusted_qty !== r.start_qty ? 700 : "normal" }}>{formatInt(r.adjusted_qty)}</span> },
-              { key: "cp", header: "Current Price", cell: (r) => formatNumber(r.current_price, { decimals: 2 }) },
-              { key: "cv", header: "Current Value", cell: (r) => money(r.current_value) },
+              { key: "sq", header: "S-Qty", cell: (r) => formatInt(r.start_qty) },
+              { key: "sp", header: "S-Price", cell: (r) => formatNumber(r.start_price, { decimals: 2 }) },
+              { key: "aq", header: "Adj-Qty", cell: (r) => <span style={{ fontWeight: r.adjusted_qty !== r.start_qty ? 700 : "normal" }}>{formatInt(r.adjusted_qty)}</span> },
+              { key: "cp", header: "Price", cell: (r) => formatNumber(r.current_price, { decimals: 2 }) },
               { key: "rg", header: "Realized G/L", cell: (r) => <span className={(r.realized_gl || 0) >= 0 ? "pos" : "neg"}>{money(r.realized_gl)}</span> },
               { key: "diff", header: "Month Net Diff", cell: (r) => <span className={(r.month_net_diff || 0) >= 0 ? "pos" : "neg"}>{money(r.month_net_diff)}</span> },
+              { key: "sv", header: "Start Value", cell: (r) => money(r.start_value) },
+              { key: "cv", header: "Current Value", cell: (r) => money(r.current_value) },
             ]}
             rows={data.monthlyPerformance || []}
           />
@@ -311,10 +312,10 @@ export default function Home() {
             columns={[
               { key: "symbol", header: "Symbol", cell: (r) => r.symbol || "—" },
               { key: "quantity", header: "Quantity", cell: (r) => formatInt(r.quantity) },
-              { key: "aps", header: "Amount / Share", cell: (r) => formatNumber(r.amount_per_share, { decimals: 4 }) },
-              { key: "exdate", header: "Ex-Dividend Date", cell: (r) => r.ex_dividend_date || "—" },
+              { key: "aps", header: "Amount", cell: (r) => formatNumber(r.amount_per_share, { decimals: 4 }) },
+              { key: "exdate", header: "Ex-Div Date", cell: (r) => r.ex_dividend_date || "—" },
               { key: "date", header: "Payment Date", cell: (r) => r.payment_date || "—" },
-              { key: "amount", header: "Dividend Amount", cell: (r) => <span className="pos">{money(r.dividend_amount)}</span> },
+              { key: "amount", header: "Div Amount", cell: (r) => <span className="pos">{money(r.dividend_amount)}</span> },
             ]}
             rows={data.dividendsList || []}
           />
