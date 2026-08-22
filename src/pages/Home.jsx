@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   ENDPOINTS, CACHE_TTL,
   getSessionCache, setSessionCache, clearSessionCache,
+  stripHKSuffix,
 } from "../styles/sharedStyles";
 import "../styles/shared.css";
 import { formatNumber, formatInt, formatPct, money } from "../utils/formatters";
@@ -209,8 +210,10 @@ export default function Home() {
           <Table
             keyFn={(r) => r.symbol}
             columns={[
-              { key: "symbol", header: "Symbol", cell: (r) => r.symbol || "—" },
-              { key: "name", header: "Stock Name", cell: (r) => r.stock_name || r.shortName_en || "—" },
+              // FIX #1: Renamed "Symbol" → "Code", strip .HK
+              { key: "symbol", header: "Code", cell: (r) => stripHKSuffix(r.symbol) || "—" },
+              // FIX #3: Added className for responsive stock name
+              { key: "name", header: "Stock Name", cell: (r) => <span className="stock-name-cell">{r.stock_name || r.shortName_en || "—"}</span> },
               { key: "qty", header: "Qty", cell: (r) => formatInt(r.quantity) },
               { key: "avg", header: "Avg Price", cell: (r) => formatNumber(r.avg_price, { decimals: 2 }) },
               {
@@ -230,7 +233,6 @@ export default function Home() {
               },
               { key: "invested", header: "Invested", cell: (r) => money(r.total_invested) },
               { key: "value", header: "Current Value", cell: (r) => money(r.current_value) },
-
             ]}
             rows={holdingsRows}
           />
@@ -275,15 +277,16 @@ export default function Home() {
           <Table
             keyFn={(r) => r.symbol}
             columns={[
-              { key: "symbol", header: "Symbol", cell: (r) => r.symbol || "—" },
+              // FIX #1: Renamed "Symbol" → "Code", strip .HK
+              { key: "symbol", header: "Code", cell: (r) => stripHKSuffix(r.symbol) || "—" },
               { key: "sq", header: "S-Qty", cell: (r) => formatInt(r.start_qty) },
               { key: "sp", header: "S-Price", cell: (r) => formatNumber(r.start_price, { decimals: 2 }) },
               { key: "aq", header: "Adj-Qty", cell: (r) => <span style={{ fontWeight: r.adjusted_qty !== r.start_qty ? 700 : "normal" }}>{formatInt(r.adjusted_qty)}</span> },
               { key: "cp", header: "Price", cell: (r) => formatNumber(r.current_price, { decimals: 2 }) },
               { key: "rg", header: "Realized G/L", cell: (r) => <span className={(r.realized_gl || 0) >= 0 ? "pos" : "neg"}>{money(r.realized_gl)}</span> },
               { key: "diff", header: "Month Net Diff", cell: (r) => <span className={(r.month_net_diff || 0) >= 0 ? "pos" : "neg"}>{money(r.month_net_diff)}</span> },
-              { key: "sv", header: "Start Value", cell: (r) => money(r.start_value) },
               { key: "cv", header: "Current Value", cell: (r) => money(r.current_value) },
+              { key: "sv", header: "Start Value", cell: (r) => money(r.start_value) },
             ]}
             rows={data.monthlyPerformance || []}
           />
@@ -307,15 +310,21 @@ export default function Home() {
         }
       >
         <div className="table-scroll-wrapper">
+          {/* FIX #4: Added tableClassName prop for left-packed layout */}
           <Table
             keyFn={(r, idx) => r.symbol || idx}
+            tableClassName="table--left-packed"
             columns={[
-              { key: "symbol", header: "Symbol", cell: (r) => r.symbol || "—" },
-              { key: "quantity", header: "Quantity", cell: (r) => formatInt(r.quantity) },
-              { key: "aps", header: "Amount", cell: (r) => formatNumber(r.amount_per_share, { decimals: 4 }) },
-              { key: "exdate", header: "Ex-Div Date", cell: (r) => r.ex_dividend_date || "—" },
+              // FIX #1: Renamed "Symbol" → "Code", strip .HK
               { key: "date", header: "Payment Date", cell: (r) => r.payment_date || "—" },
+              { key: "symbol", header: "Code", cell: (r) => stripHKSuffix(r.symbol) || "—" },
+              { key: "name", header: "Stock Name", cell: (r) => <span className="stock-name-cell">{r.stock_name || r.shortName_en || "—"}</span> },              
+              { key: "quantity", header: "Quantity", cell: (r) => formatInt(r.quantity) },
+              { key: "aps", header: "Amount/Share", cell: (r) => formatNumber(r.amount_per_share, { decimals: 4 }) },
+              { key: "exdate", header: "Ex-Div Date", cell: (r) => r.ex_dividend_date || "—" },
               { key: "amount", header: "Div Amount", cell: (r) => <span className="pos">{money(r.dividend_amount)}</span> },
+              // FIX #4: Spacer column to push content left
+              { key: "_spacer", header: "", cell: () => "" },
             ]}
             rows={data.dividendsList || []}
           />

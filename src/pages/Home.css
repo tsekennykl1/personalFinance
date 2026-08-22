@@ -230,8 +230,30 @@
 
 .table th {
   font-size: 12px;
-  color: #445;
+  font:bold;  
+  color: #222;
   background: #fafbff;
+}
+
+/* FIX #3: Stock Name cell class */
+.stock-name-cell {
+  font-size: 12px;
+  color: #555;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* FIX #4: Dividend table left-aligned with spacer column */
+.table--left-packed th,
+.table--left-packed td {
+  text-align: left;
+  white-space: nowrap;
+}
+.table--left-packed th:last-child,
+.table--left-packed td:last-child {
+  width: 100%;
 }
 
 .alert {
@@ -351,6 +373,12 @@
     font-size: 12px;
   }
 
+  /* FIX #3: Smaller stock name on tablet */
+  .stock-name-cell {
+    font-size: 11px;
+    max-width: 110px;
+  }
+
   .code {
     font-size: 11px;
     padding: 10px;
@@ -457,6 +485,13 @@
     font-size: 11px;
   }
 
+  /* FIX #3: Much smaller stock name on iPhone portrait */
+  .stock-name-cell {
+    font-size: 10px;
+    max-width: 80px;
+    letter-spacing: -0.2px;
+  }
+
   .code {
     font-size: 10px;
     padding: 8px;
@@ -495,5 +530,10 @@
   .table td {
     padding: 5px 4px;
     font-size: 10px;
+  }
+
+  .stock-name-cell {
+    font-size: 9px;
+    max-width: 65px;
   }
 }

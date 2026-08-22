@@ -24,10 +24,10 @@ export const COLORS = {
   
   // ─── Format helpers ───
   export function fmtMoney(val) {
-    if (val == null) return "$0.00";
-    return `$${parseFloat(val).toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+    if (val == null) return "$0";
+    return `$${Math.round(parseFloat(val)).toLocaleString(undefined, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     })}`;
   }
   
@@ -39,6 +39,13 @@ export const COLORS = {
   export function fmtPrice(val, decimals = 2) {
     if (val == null) return "-";
     return `$${parseFloat(val).toFixed(decimals)}`;
+  }
+  
+  // ─── FIX #1: Strip .HK suffix from symbol display ───
+  export function stripHKSuffix(symbol) {
+    if (!symbol) return "";
+    const s = String(symbol).trim();
+    return s.toUpperCase().endsWith(".HK") ? s.slice(0, -3) : s;
   }
   
   // ─── Date Helpers ───

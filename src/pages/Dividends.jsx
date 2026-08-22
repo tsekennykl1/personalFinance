@@ -245,9 +245,9 @@ export default function Dividends() {
                 <table className="data-table view-desktop">
                   <thead>
                     <tr>
-                      <th>Symbol</th>
-                      <th>Stock Name</th>
                       <th>Payment Date</th>
+                      <th>Code</th>
+                      <th>Stock Name</th>
                       <th>Ex-Div Date</th>
                       <th className="text-right">Dividend/Share</th>
                       <th className="text-right">Quantity</th>
@@ -258,9 +258,9 @@ export default function Dividends() {
                   <tbody>
                     {rows.map((row) => (
                       <tr key={row.id}>
+                        <td>{row.payment_date ? row.payment_date.slice(0, 10) : "-"}</td>
                         <td className="font-bold">{row.symbol}</td>
                         <td className="color-muted">{row.stock_name || "-"}</td>
-                        <td>{row.payment_date ? row.payment_date.slice(0, 10) : "-"}</td>
                         <td>{row.ex_dividend_date ? row.ex_dividend_date.slice(0, 10) : "-"}</td>
                         <td className="text-right">{parseFloat(row.amount_per_share).toFixed(4)}</td>
                         <td className="text-right">{parseFloat(row.quantity).toLocaleString()}</td>

@@ -1,40 +1,28 @@
 import React from "react";
 
-/**
- * Generic data table component.
- * @param {Array} columns - [{key, header, cell: (row) => ReactNode}]
- * @param {Array} rows - data array
- * @param {Function} keyFn - (row, idx) => unique key
- */
-export default function Table({ columns, rows, keyFn }) {
+export default function Table({ columns, rows, keyFn, tableClassName = "" }) {
+  if (!rows || rows.length === 0) {
+    return <div className="muted" style={{ padding: "16px", textAlign: "center" }}>No data</div>;
+  }
+
   return (
-    <div className="tableWrap">
-      <table className="table">
-        <thead>
-          <tr>
-            {columns.map((c) => (
-              <th key={c.key}>{c.header}</th>
+    <table className={`table ${tableClassName}`}>
+      <thead>
+        <tr>
+          {columns.map((col) => (
+            <th key={col.key}>{col.header}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row, idx) => (
+          <tr key={keyFn ? keyFn(row, idx) : idx}>
+            {columns.map((col) => (
+              <td key={col.key}>{col.cell(row, idx)}</td>
             ))}
           </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr>
-              <td className="muted" colSpan={columns.length}>
-                No data
-              </td>
-            </tr>
-          ) : (
-            rows.map((r, idx) => (
-              <tr key={keyFn ? keyFn(r, idx) : idx}>
-                {columns.map((c) => (
-                  <td key={c.key}>{c.cell(r)}</td>
-                ))}
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
+        ))}
+      </tbody>
+    </table>
   );
 }
