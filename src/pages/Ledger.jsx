@@ -1,9 +1,13 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Plus, Pencil, Trash2, X, Loader2, ArrowLeft } from "lucide-react";
+import {
+  ENDPOINTS, CACHE_TTL,
+  getSessionCache, setSessionCache, clearSessionCache,
+  parseDateToISO, fmtMoney,
+} from "../styles/sharedStyles";
+import "../styles/shared.css";
 
-const ENDPOINTS = {
-  CRUD: "https://z35lnmmzgi.execute-api.ap-east-1.amazonaws.com/prod/lambda_crud_handler",
-};
+const CACHE_KEY_PREFIX = "ledger_cache_";
 
 const EMPTY_FORM = {
   type: "E",
@@ -17,22 +21,6 @@ const TYPE_OPTIONS = [
   { value: "E", label: "Expense" },
   { value: "I", label: "Income" },
 ];
-
-// Helper: convert various date formats to YYYY-MM-DD for <input type="date">
-const parseDateToISO = (dateStr) => {
-  if (!dateStr) return "";
-  if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) return dateStr.slice(0, 10);
-  const slashParts = dateStr.split("/");
-  if (slashParts.length === 3) {
-    const [day, month, year] = slashParts;
-    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
-  }
-  const d = new Date(dateStr);
-  if (!isNaN(d.getTime())) {
-    return d.toISOString().slice(0, 10);
-  }
-  return "";
-};
 
 export default function Ledger() {
   const [yearMonth, setYearMonth] = useState(() => {
@@ -50,8 +38,17 @@ export default function Ledger() {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [formError, setFormError] = useState("");
 
+  const cacheKey = CACHE_KEY_PREFIX + yearMonth;
+
   const fetchLedger = useCallback(
-    async (signal) => {
+    async (signal, forceRefresh = false) => {
+      if (!forceRefresh) {
+        const cached = getSessionCache(cacheKey);
+        if (cached) {
+          setRows(cached);
+          return;
+        }
+      }
       setLoading(true);
       setError("");
       try {
@@ -67,7 +64,9 @@ export default function Ledger() {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
-        setRows(json.data || []);
+        const data = json.data || [];
+        setRows(data);
+        setSessionCache(cacheKey, data, CACHE_TTL);
       } catch (err) {
         if (err.name === "AbortError") return;
         setError(err.message);
@@ -75,7 +74,7 @@ export default function Ledger() {
       }
       setLoading(false);
     },
-    [yearMonth]
+    [yearMonth, cacheKey]
   );
 
   useEffect(() => {
@@ -95,11 +94,7 @@ export default function Ledger() {
 
   const openEditModal = (row) => {
     const id = row.id || row.entry_id || row.ledger_id || row._id;
-    if (!id) {
-      setError("Cannot edit: row has no ID field.");
-      return;
-    }
-
+    if (!id) { setError("Cannot edit: row has no ID field."); return; }
     const rawDate = row.ledger_datetime || row.datetime || row.date || "";
     const parsedDate = parseDateToISO(rawDate) || new Date().toISOString().slice(0, 10);
 
@@ -149,23 +144,15 @@ export default function Ledger() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resource_name: "ledger", action, payload }),
       });
-
       const responseText = await res.text();
-      let json;
-      try { json = JSON.parse(responseText); } catch (e) { json = {}; }
-
-      if (!res.ok) {
-        throw new Error(json.error || json.message || `HTTP ${res.status}: ${responseText}`);
-      }
-
-      if (json.error) {
-        throw new Error(json.error);
-      }
+      let json; try { json = JSON.parse(responseText); } catch { json = {}; }
+      if (!res.ok) throw new Error(json.error || json.message || `HTTP ${res.status}: ${responseText}`);
+      if (json.error) throw new Error(json.error);
 
       setModalOpen(false);
-      fetchLedger();
+      clearSessionCache(cacheKey);
+      fetchLedger(undefined, true);
     } catch (err) {
-      console.error("Submit error:", err);
       setFormError(err.message);
     }
     setSubmitting(false);
@@ -173,30 +160,20 @@ export default function Ledger() {
 
   const handleDelete = async (id) => {
     try {
-      const body = JSON.stringify({
-        resource_name: "ledger",
-        action: "delete",
-        payload: { entry_id: id },
-      });
-
       const res = await fetch(ENDPOINTS.CRUD, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body,
+        body: JSON.stringify({ resource_name: "ledger", action: "delete", payload: { entry_id: id } }),
       });
-
       const responseText = await res.text();
-
       if (!res.ok) {
-        let json;
-        try { json = JSON.parse(responseText); } catch (e) { json = {}; }
+        let json; try { json = JSON.parse(responseText); } catch { json = {}; }
         throw new Error(json.error || json.message || `HTTP ${res.status}`);
       }
-
       setDeleteConfirm(null);
-      fetchLedger();
+      clearSessionCache(cacheKey);
+      fetchLedger(undefined, true);
     } catch (err) {
-      console.error("Delete error:", err);
       setError(`Delete failed: ${err.message}`);
       setDeleteConfirm(null);
     }
@@ -206,11 +183,8 @@ export default function Ledger() {
 
   const incomeTotal = rows.filter((r) => r.type === "I").reduce((s, r) => s + parseFloat(r.amount || 0), 0);
   const expenseTotal = rows.filter((r) => r.type === "E").reduce((s, r) => s + parseFloat(r.amount || 0), 0);
-
-  // FIX #1: Net = Income + Expenses (expenses are already negative)
   const net = incomeTotal + expenseTotal;
 
-  // FIX #4: Sort rows by date Ascending
   const sortedRows = [...rows].sort((a, b) => {
     const dateA = a.datetime || a.ledger_datetime || "";
     const dateB = b.datetime || b.ledger_datetime || "";
@@ -218,142 +192,134 @@ export default function Ledger() {
   });
 
   return (
-    <div style={{ background: "#f6f7fb", minHeight: "100vh", padding: "18px" }}>
-      <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-        {/* Top Bar — FIX #2: +Add button removed from here */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px", gap: "12px", flexWrap: "wrap" }}>
+    <div className="page-shell">
+      <div className="page-container">
+
+        {/* Top Bar */}
+        <div className="top-bar">
           <div>
-            <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 800, color: "#111" }}>📒 Ledger</h1>
-            <div style={{ marginTop: "6px", display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-              <span style={{ display: "inline-flex", alignItems: "center", padding: "4px 10px", borderRadius: "999px", fontSize: "12px", fontWeight: 800, border: "1px solid #dfe3f0", background: "#fff", color: "#333" }}>
-                {rows.length} entries
-              </span>
+            <h1 className="top-bar-title">📒 Ledger</h1>
+            <div className="top-bar-badges">
+              <span className="badge-pill badge-neutral">{rows.length} entries</span>
             </div>
           </div>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            <input
-              type="month"
-              value={yearMonth}
-              onChange={(e) => setYearMonth(e.target.value)}
-              style={{ border: "1px solid #d2d7e6", background: "#fff", padding: "8px 10px", borderRadius: "10px", fontWeight: 700, fontSize: "13px" }}
-            />
-            <button
-              type="button"
-              onClick={() => { window.location.href = "/"; }}
-              title="Back to Home"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: "36px",
-                height: "36px",
-                border: "1px solid #d2d7e6",
-                background: "#fff",
-                borderRadius: "10px",
-                cursor: "pointer",
-                color: "#445",
-              }}
-            >
-              <ArrowLeft size={18} />
+          <div className="top-bar-actions">
+            <input type="month" value={yearMonth} onChange={(e) => setYearMonth(e.target.value)} className="month-input" />
+            <button type="button" onClick={() => { window.location.href = "/"; }} title="Back to Home" className="btn-back">
+              <ArrowLeft size={16} />
             </button>
           </div>
         </div>
 
         {/* KPI Summary */}
-        <div className="kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "10px", marginBottom: "12px" }}>
-          <div style={{ border: "1px solid #eef0f6", borderRadius: "12px", padding: "12px", background: "#fff" }}>
-            <div style={{ color: "#667", fontSize: "12px", fontWeight: 700 }}>Income</div>
-            <div style={{ fontSize: "18px", fontWeight: 900, marginTop: "5px", color: "#146c2e" }}>${incomeTotal.toFixed(2)}</div>
+        <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+          <div className="kpi-card">
+            <div className="kpi-label">Income</div>
+            <div className="kpi-value kpi-value--green">${incomeTotal.toFixed(2)}</div>
           </div>
-          <div style={{ border: "1px solid #eef0f6", borderRadius: "12px", padding: "12px", background: "#fff" }}>
-            <div style={{ color: "#667", fontSize: "12px", fontWeight: 700 }}>Expenses</div>
-            <div style={{ fontSize: "18px", fontWeight: 900, marginTop: "5px", color: "#b02020" }}>${expenseTotal.toFixed(2)}</div>
+          <div className="kpi-card">
+            <div className="kpi-label">Expenses</div>
+            <div className="kpi-value kpi-value--red">${expenseTotal.toFixed(2)}</div>
           </div>
-          <div style={{ border: "1px solid #eef0f6", borderRadius: "12px", padding: "12px", background: "#fff" }}>
-            <div style={{ color: "#667", fontSize: "12px", fontWeight: 700 }}>Net Amount</div>
-            <div style={{ fontSize: "18px", fontWeight: 900, marginTop: "5px", color: net >= 0 ? "#146c2e" : "#b02020" }}>${net.toFixed(2)}</div>
+          <div className="kpi-card">
+            <div className="kpi-label">Net Amount</div>
+            <div className="kpi-value" style={{ color: net >= 0 ? "#146c2e" : "#b02020" }}>${net.toFixed(2)}</div>
           </div>
         </div>
 
         {/* Error */}
         {error && (
-          <div style={{ borderRadius: "12px", padding: "12px", marginBottom: "12px", border: "1px solid #ffc9c9", background: "#fff0f0" }}>
-            <div style={{ fontWeight: 900, marginBottom: "6px", color: "#8d1414" }}>Error</div>
-            <div style={{ fontSize: "13px" }}>{error}</div>
+          <div className="error-alert">
+            <div className="error-alert__title">Error</div>
+            <div className="error-alert__body">{error}</div>
           </div>
         )}
 
         {/* Table Card */}
-        <div style={{ background: "#fff", border: "1px solid #e6e8f0", borderRadius: "12px", overflow: "hidden" }}>
-          {/* FIX #2: +Add button moved here to far-right of Ledger Entries row */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", borderBottom: "1px solid #eef0f6", flexWrap: "wrap", gap: "8px" }}>
+        <div className="table-card">
+          <div className="table-card__header">
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 800 }}>Ledger Entries</h3>
-              <span style={{ color: "#667", fontSize: "12px", fontWeight: 700 }}>{yearMonth}</span>
+              <h3 className="table-card__title">Ledger Entries</h3>
+              <span className="table-card__subtitle">{yearMonth}</span>
             </div>
-            <button
-              type="button"
-              onClick={openAddModal}
-              style={{ display: "inline-flex", alignItems: "center", gap: "4px", border: "none", background: "#1f4fff", color: "#fff", padding: "8px 14px", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" }}
-            >
+            <button type="button" onClick={openAddModal} className="btn-add">
               <Plus size={14} /> Add
             </button>
           </div>
-          <div style={{ overflow: "auto" }}>
+
+          <div className="table-card__body">
             {loading ? (
-              <div style={{ display: "flex", justifyContent: "center", padding: "48px 0" }}>
-                <Loader2 size={28} style={{ animation: "spin 1s linear infinite", color: "#1f4fff" }} />
+              <div className="loading-state">
+                <Loader2 size={28} className="spinner" style={{ color: "#1f4fff" }} />
               </div>
             ) : sortedRows.length === 0 ? (
-              <div style={{ textAlign: "center", color: "#667", padding: "48px 0", fontSize: "14px" }}>No ledger entries for {yearMonth}</div>
+              <div className="empty-state">No ledger entries for {yearMonth}</div>
             ) : (
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "600px", background: "#fff" }}>
-                <thead>
-                  <tr>
-                    {/* FIX #3: Reordered — Type, Date, Category, Amount, Comment, Actions (Month removed) */}
-                    <th style={{ padding: "10px", borderBottom: "1px solid #eef0f6", textAlign: "center", fontSize: "12px", color: "#445", background: "#fafbff", whiteSpace: "nowrap" }}>Type</th>
-                    <th style={{ padding: "10px", borderBottom: "1px solid #eef0f6", textAlign: "left", fontSize: "12px", color: "#445", background: "#fafbff", whiteSpace: "nowrap" }}>Date</th>
-                    <th style={{ padding: "10px", borderBottom: "1px solid #eef0f6", textAlign: "left", fontSize: "12px", color: "#445", background: "#fafbff", whiteSpace: "nowrap" }}>Category</th>
-                    <th style={{ padding: "10px", borderBottom: "1px solid #eef0f6", textAlign: "right", fontSize: "12px", color: "#445", background: "#fafbff", whiteSpace: "nowrap" }}>Amount</th>
-                    <th className="comment-col" style={{ padding: "10px", borderBottom: "1px solid #eef0f6", textAlign: "left", fontSize: "12px", color: "#445", background: "#fafbff", whiteSpace: "nowrap" }}>Comment</th>
-                    <th style={{ padding: "10px", borderBottom: "1px solid #eef0f6", textAlign: "center", fontSize: "12px", color: "#445", background: "#fafbff", whiteSpace: "nowrap" }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedRows.map((row) => (
-                    <tr key={row.id}>
-                      <td style={{ padding: "10px", borderBottom: "1px solid #eef0f6", fontSize: "13px", textAlign: "center" }}>
-                        <span style={{
-                          display: "inline-flex", alignItems: "center", padding: "3px 8px", borderRadius: "999px", fontSize: "11px", fontWeight: 800,
-                          border: row.type === "I" ? "1px solid #b9f2c1" : "1px solid #ffc9c9",
-                          background: row.type === "I" ? "#edfff0" : "#fff0f0",
-                          color: row.type === "I" ? "#136f2d" : "#8d1414",
-                        }}>
-                          {row.type === "I" ? "Income" : "Expense"}
-                        </span>
-                      </td>
-                      {/* FIX #3: Date moved to 2nd column */}
-                      <td style={{ padding: "10px", borderBottom: "1px solid #eef0f6", fontSize: "13px", whiteSpace: "nowrap" }}>{row.datetime ? row.datetime.slice(0, 10) : "-"}</td>
-                      <td style={{ padding: "10px", borderBottom: "1px solid #eef0f6", fontSize: "13px", fontWeight: 700 }}>{row.category}</td>
-                      <td style={{ padding: "10px", borderBottom: "1px solid #eef0f6", fontSize: "13px", textAlign: "right", fontWeight: 800, color: row.type === "I" ? "#146c2e" : "#b02020", whiteSpace: "nowrap" }}>
-                        ${parseFloat(row.amount).toFixed(2)}
-                      </td>
-                      {/* FIX #5: More display space for Comment */}
-                      <td className="comment-col" style={{ padding: "10px", borderBottom: "1px solid #eef0f6", fontSize: "13px", color: "#667", minWidth: "200px", maxWidth: "350px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.comment || "-"}</td>
-                      <td style={{ padding: "10px", borderBottom: "1px solid #eef0f6", fontSize: "13px", textAlign: "center" }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
-                          <button type="button" onClick={() => openEditModal(row)} style={{ background: "none", border: "none", cursor: "pointer", color: "#1f4fff", padding: "4px" }} title="Edit">
-                            <Pencil size={14} />
-                          </button>
-                          <button type="button" onClick={() => setDeleteConfirm(row.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#b02020", padding: "4px" }} title="Delete">
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
+              <>
+                {/* Desktop Table */}
+                <table className="data-table view-desktop">
+                  <thead>
+                    <tr>
+                      <th className="text-center">Type</th>
+                      <th>Date</th>
+                      <th>Category</th>
+                      <th className="text-right">Amount</th>
+                      <th>Comment</th>
+                      <th className="text-center">Actions</th>
                     </tr>
+                  </thead>
+                  <tbody>
+                    {sortedRows.map((row) => (
+                      <tr key={row.id}>
+                        <td className="text-center">
+                          <span className={`type-pill ${row.type === "I" ? "type-pill--income" : "type-pill--expense"}`}>
+                            {row.type === "I" ? "Income" : "Expense"}
+                          </span>
+                        </td>
+                        <td className="nowrap">{row.datetime ? row.datetime.slice(0, 10) : "-"}</td>
+                        <td className="font-bold">{row.category}</td>
+                        <td className="text-right font-heavy nowrap" style={{ color: row.type === "I" ? "#146c2e" : "#b02020" }}>
+                          ${parseFloat(row.amount).toFixed(2)}
+                        </td>
+                        <td className="comment-cell">{row.comment || "-"}</td>
+                        <td className="text-center">
+                          <div className="action-group">
+                            <button type="button" onClick={() => openEditModal(row)} className="action-btn" title="Edit"><Pencil size={14} /></button>
+                            <button type="button" onClick={() => setDeleteConfirm(row.id)} className="action-btn action-btn--danger" title="Delete"><Trash2 size={14} /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {/* Mobile Cards */}
+                <div className="view-mobile">
+                  {sortedRows.map((row) => (
+                    <div key={row.id} className="mobile-card">
+                      <div className="mobile-card__header">
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                          <span className={`type-pill ${row.type === "I" ? "type-pill--income" : "type-pill--expense"}`}>
+                            {row.type === "I" ? "Income" : "Expense"}
+                          </span>
+                          <span className="mobile-card__symbol">{row.category}</span>
+                        </div>
+                        <div className="action-group">
+                          <button type="button" onClick={() => openEditModal(row)} className="action-btn" title="Edit"><Pencil size={14} /></button>
+                          <button type="button" onClick={() => setDeleteConfirm(row.id)} className="action-btn action-btn--danger" title="Delete"><Trash2 size={14} /></button>
+                        </div>
+                      </div>
+                      <div className="mobile-card__grid">
+                        <div><span className="color-muted">Date:</span> {row.datetime ? row.datetime.slice(0, 10) : "-"}</div>
+                        <div style={{ fontWeight: 800, color: row.type === "I" ? "#146c2e" : "#b02020" }}>
+                          ${parseFloat(row.amount).toFixed(2)}
+                        </div>
+                      </div>
+                      {row.comment && <div className="mobile-card__notes"><span className="color-muted">Note:</span> {row.comment}</div>}
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -361,105 +327,43 @@ export default function Ledger() {
 
       {/* Add/Edit Modal */}
       {modalOpen && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 }}>
-          <div
-            onClick={() => setModalOpen(false)}
-            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.4)" }}
-          />
-          <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px", pointerEvents: "none" }}>
-            <div style={{ width: "100%", maxWidth: "440px", background: "#fff", borderRadius: "12px", padding: "24px", boxShadow: "0 20px 60px rgba(0,0,0,0.15)", border: "1px solid #e6e8f0", pointerEvents: "auto", position: "relative", zIndex: 10 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
-                <h2 style={{ fontSize: "16px", fontWeight: 800, margin: 0 }}>
-                  {modalMode === "add" ? "Add Ledger Entry" : "Edit Ledger Entry"}
-                </h2>
-                <button type="button" onClick={() => setModalOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#667", padding: "4px" }}>
-                  <X size={18} />
-                </button>
+        <div className="modal-overlay">
+          <div className="modal-backdrop" onClick={() => setModalOpen(false)} />
+          <div className="modal-positioner">
+            <div className="modal-box">
+              <div className="modal-header">
+                <h2 className="modal-title">{modalMode === "add" ? "Add Ledger Entry" : "Edit Ledger Entry"}</h2>
+                <button type="button" onClick={() => setModalOpen(false)} className="modal-close"><X size={18} /></button>
               </div>
-
-              {formError && (
-                <div style={{ padding: "8px 12px", marginBottom: "12px", borderRadius: "8px", background: "#fff0f0", border: "1px solid #ffc9c9", color: "#8d1414", fontSize: "12px", fontWeight: 600 }}>
-                  {formError}
-                </div>
-              )}
-
+              {formError && <div className="form-error">{formError}</div>}
               <form onSubmit={handleSubmit}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
+                <div className="form-row form-row--2col">
                   <div>
-                    <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#445", marginBottom: "4px" }}>Type *</label>
-                    <select
-                      value={form.type}
-                      onChange={(e) => updateField("type", e.target.value)}
-                      style={{ width: "100%", padding: "8px 10px", border: "1px solid #d2d7e6", borderRadius: "8px", fontSize: "13px", background: "#fff", boxSizing: "border-box" }}
-                    >
-                      {TYPE_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
+                    <label className="form-label">Type *</label>
+                    <select value={form.type} onChange={(e) => updateField("type", e.target.value)} className="form-input">
+                      {TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#445", marginBottom: "4px" }}>Category *</label>
-                    <input
-                      type="text"
-                      required
-                      value={form.category}
-                      onChange={(e) => updateField("category", e.target.value)}
-                      placeholder="e.g. Groceries"
-                      style={{ width: "100%", padding: "8px 10px", border: "1px solid #d2d7e6", borderRadius: "8px", fontSize: "13px", boxSizing: "border-box" }}
-                    />
+                    <label className="form-label">Category *</label>
+                    <input type="text" required value={form.category} onChange={(e) => updateField("category", e.target.value)} placeholder="e.g. Groceries" className="form-input" />
                   </div>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
+                <div className="form-row form-row--2col">
                   <div>
-                    <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#445", marginBottom: "4px" }}>Amount *</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      required
-                      value={form.amount}
-                      onChange={(e) => updateField("amount", e.target.value)}
-                      style={{ width: "100%", padding: "8px 10px", border: "1px solid #d2d7e6", borderRadius: "8px", fontSize: "13px", boxSizing: "border-box" }}
-                    />
+                    <label className="form-label">Amount *</label>
+                    <input type="number" step="0.01" required value={form.amount} onChange={(e) => updateField("amount", e.target.value)} className="form-input" />
                   </div>
                   <div>
-                    <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#445", marginBottom: "4px" }}>Date</label>
-                    <input
-                      type="date"
-                      value={form.ledger_datetime}
-                      onChange={(e) => updateField("ledger_datetime", e.target.value)}
-                      style={{ width: "100%", padding: "8px 10px", border: "1px solid #d2d7e6", borderRadius: "8px", fontSize: "13px", boxSizing: "border-box" }}
-                    />
+                    <label className="form-label">Date</label>
+                    <input type="date" value={form.ledger_datetime} onChange={(e) => updateField("ledger_datetime", e.target.value)} className="form-input" />
                   </div>
                 </div>
-                {/* FIX #5: Full-width textarea for Comment with more space */}
                 <div style={{ marginBottom: "16px" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#445", marginBottom: "4px" }}>Comment</label>
-                  <textarea
-                    value={form.comment}
-                    onChange={(e) => updateField("comment", e.target.value)}
-                    placeholder="Optional comment"
-                    rows={3}
-                    style={{ width: "100%", padding: "8px 10px", border: "1px solid #d2d7e6", borderRadius: "8px", fontSize: "13px", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit" }}
-                  />
+                  <label className="form-label">Comment</label>
+                  <textarea value={form.comment} onChange={(e) => updateField("comment", e.target.value)} placeholder="Optional comment" rows={3} className="form-textarea" />
                 </div>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  style={{
-                    width: "100%",
-                    boxSizing: "border-box",
-                    padding: "10px",
-                    border: "none",
-                    background: "#1f4fff",
-                    color: "#fff",
-                    borderRadius: "10px",
-                    fontWeight: 700,
-                    fontSize: "13px",
-                    cursor: submitting ? "not-allowed" : "pointer",
-                    opacity: submitting ? 0.6 : 1,
-                    textAlign: "center",
-                  }}
-                >
+                <button type="submit" disabled={submitting} className="form-submit">
                   {submitting ? "Submitting..." : modalMode === "add" ? "Insert" : "Update"}
                 </button>
               </form>
@@ -470,44 +374,19 @@ export default function Ledger() {
 
       {/* Delete Confirm */}
       {deleteConfirm !== null && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 }}>
-          <div
-            onClick={() => setDeleteConfirm(null)}
-            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.4)" }}
-          />
-          <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px", pointerEvents: "none" }}>
-            <div style={{ width: "100%", maxWidth: "360px", background: "#fff", borderRadius: "12px", padding: "24px", boxShadow: "0 20px 60px rgba(0,0,0,0.15)", border: "1px solid #e6e8f0", textAlign: "center", pointerEvents: "auto", position: "relative", zIndex: 10 }}>
-              <p style={{ fontSize: "16px", fontWeight: 700, marginBottom: "16px" }}>Delete this ledger entry?</p>
-              <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
-                <button type="button" onClick={() => setDeleteConfirm(null)} style={{ padding: "8px 16px", border: "1px solid #d2d7e6", background: "#fff", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" }}>Cancel</button>
-                <button type="button" onClick={() => handleDelete(deleteConfirm)} style={{ padding: "8px 16px", border: "none", background: "#b02020", color: "#fff", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" }}>Delete</button>
+        <div className="modal-overlay">
+          <div className="modal-backdrop" onClick={() => setDeleteConfirm(null)} />
+          <div className="modal-positioner">
+            <div className="modal-box modal-box--sm">
+              <p>Delete this ledger entry?</p>
+              <div className="confirm-actions">
+                <button type="button" onClick={() => setDeleteConfirm(null)} className="btn-cancel">Cancel</button>
+                <button type="button" onClick={() => handleDelete(deleteConfirm)} className="btn-delete">Delete</button>
               </div>
             </div>
           </div>
         </div>
       )}
-
-      {/* FIX #6: Responsive styles */}
-      <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-
-        @media (max-width: 768px) {
-          .kpi-grid {
-            grid-template-columns: 1fr !important;
-          }
-          .comment-col {
-            min-width: 120px !important;
-            max-width: 180px !important;
-          }
-        }
-
-        @media (max-width: 480px) {
-          .kpi-grid {
-            grid-template-columns: 1fr !important;
-            gap: 6px !important;
-          }
-        }
-      `}</style>
     </div>
   );
 }

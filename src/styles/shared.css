@@ -1,0 +1,624 @@
+/* ═══════════════════════════════════════════════════
+   SHARED STYLES - shared.css
+   Common layout, responsive, and animation styles
+   for all page components (Home, Transactions, Ledger, Dividends)
+   ═══════════════════════════════════════════════════ */
+
+/* ─── Animations ─── */
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  .spinner {
+    animation: spin 1s linear infinite;
+  }
+  
+  /* ─── Page Shell ─── */
+  .page-shell {
+    background: #f6f7fb;
+    min-height: 100vh;
+    min-height: 100dvh; /* dynamic viewport height for mobile browsers */
+    padding: 12px;
+    box-sizing: border-box;
+  }
+  .page-container {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  
+  /* ─── Top Bar ─── */
+  .top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 14px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .top-bar-title {
+    margin: 0;
+    font-size: clamp(18px, 5vw, 26px);
+    font-weight: 800;
+    color: #111;
+  }
+  .top-bar-badges {
+    margin-top: 6px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .top-bar-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  
+  /* ─── Badge / Pill ─── */
+  .badge-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+  .badge-neutral {
+    border: 1px solid #dfe3f0;
+    background: #fff;
+    color: #333;
+  }
+  .badge-green {
+    border: 1px solid #b9f2c1;
+    background: #edfff0;
+    color: #136f2d;
+  }
+  .badge-red {
+    border: 1px solid #ffc9c9;
+    background: #fff0f0;
+    color: #8d1414;
+  }
+  
+  /* ─── Type Pill (BUY/SELL, Income/Expense) ─── */
+  .type-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+  }
+  .type-pill--buy,
+  .type-pill--income {
+    border: 1px solid #b9f2c1;
+    background: #edfff0;
+    color: #136f2d;
+  }
+  .type-pill--sell,
+  .type-pill--expense {
+    border: 1px solid #ffc9c9;
+    background: #fff0f0;
+    color: #8d1414;
+  }
+  
+  /* ─── KPI Grid ─── */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .kpi-card {
+    border: 1px solid #eef0f6;
+    border-radius: 12px;
+    padding: 12px;
+    background: #fff;
+  }
+  .kpi-card--green {
+    border-color: #b9f2c1;
+    background: #edfff0;
+  }
+  .kpi-card--red {
+    border-color: #ffc9c9;
+    background: #fff0f0;
+  }
+  .kpi-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #667;
+  }
+  .kpi-label--green { color: #136f2d; }
+  .kpi-label--red { color: #8d1414; }
+  .kpi-value {
+    font-size: clamp(14px, 3.5vw, 18px);
+    font-weight: 900;
+    margin-top: 5px;
+  }
+  .kpi-value--green { color: #136f2d; }
+  .kpi-value--red { color: #8d1414; }
+  .kpi-sub {
+    font-size: 11px;
+    margin-top: 2px;
+  }
+  .kpi-sub--green { color: #4a9960; }
+  .kpi-sub--red { color: #b04040; }
+  
+  /* ─── Error Alert ─── */
+  .error-alert {
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 12px;
+    border: 1px solid #ffc9c9;
+    background: #fff0f0;
+  }
+  .error-alert__title {
+    font-weight: 900;
+    margin-bottom: 6px;
+    color: #8d1414;
+  }
+  .error-alert__body {
+    font-size: 13px;
+  }
+  
+  /* ─── Table Card ─── */
+  .table-card {
+    background: #fff;
+    border: 1px solid #e6e8f0;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .table-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    border-bottom: 1px solid #eef0f6;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .table-card__title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 800;
+  }
+  .table-card__subtitle {
+    color: #667;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .table-card__body {
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* ─── Table ─── */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+  }
+  .data-table th {
+    padding: 10px;
+    border-bottom: 1px solid #eef0f6;
+    text-align: left;
+    font-size: 12px;
+    color: #445;
+    background: #fafbff;
+    white-space: nowrap;
+    font-weight: 700;
+  }
+  .data-table th.text-center { text-align: center; }
+  .data-table th.text-right { text-align: right; }
+  .data-table td {
+    padding: 10px;
+    border-bottom: 1px solid #eef0f6;
+    font-size: 13px;
+  }
+  .data-table td.text-center { text-align: center; }
+  .data-table td.text-right { text-align: right; }
+  .data-table td.font-bold { font-weight: 700; }
+  .data-table td.font-heavy { font-weight: 800; }
+  .data-table td.color-muted { color: #555; font-size: 12px; }
+  .data-table td.nowrap { white-space: nowrap; }
+  .data-table td.comment-cell {
+    min-width: 180px;
+    max-width: 300px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .data-table tfoot td {
+    padding: 10px;
+    background: #fafbff;
+    font-weight: 800;
+  }
+  
+  /* ─── Action Buttons ─── */
+  .action-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    color: #1f4fff;
+  }
+  .action-btn--danger {
+    color: #b02020;
+  }
+  .action-group {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  
+  /* ─── Add Button ─── */
+  .btn-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: none;
+    background: #1f4fff;
+    color: #fff;
+    padding: 8px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 13px;
+  }
+  
+  /* ─── Month Input ─── */
+  .month-input {
+    border: 1px solid #d2d7e6;
+    background: #fff;
+    padding: 8px 10px;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 13px;
+    min-width: 130px;
+  }
+  
+  /* ─── Back Button ─── */
+  .btn-back {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid #d2d7e6;
+    background: #fff;
+    border-radius: 10px;
+    cursor: pointer;
+    color: #667;
+  }
+  
+  /* ─── Empty State ─── */
+  .empty-state {
+    text-align: center;
+    color: #667;
+    padding: 48px 0;
+    font-size: 14px;
+  }
+  
+  /* ─── Loading State ─── */
+  .loading-state {
+    display: flex;
+    justify-content: center;
+    padding: 48px 0;
+  }
+  
+  /* ─── Modal ─── */
+  .modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 9999;
+  }
+  .modal-backdrop {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.4);
+  }
+  .modal-positioner {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    pointer-events: none;
+    overflow: auto;
+  }
+  .modal-box {
+    width: 100%;
+    max-width: 440px;
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+    border: 1px solid #e6e8f0;
+    pointer-events: auto;
+    position: relative;
+    z-index: 10;
+    margin: auto;
+    max-height: 90vh;
+    max-height: 90dvh;
+    overflow-y: auto;
+  }
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .modal-title {
+    font-size: 16px;
+    font-weight: 800;
+    margin: 0;
+  }
+  .modal-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #667;
+    padding: 4px;
+  }
+  
+  /* ─── Form ─── */
+  .form-row {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .form-row--2col { grid-template-columns: 1fr 1fr; }
+  .form-row--3col { grid-template-columns: 1fr 1fr 1fr; }
+  .form-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    color: #445;
+    margin-bottom: 4px;
+  }
+  .form-input {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #d2d7e6;
+    border-radius: 8px;
+    font-size: 13px;
+    box-sizing: border-box;
+    font-family: inherit;
+  }
+  .form-input--disabled {
+    background: #f5f5f5;
+    opacity: 0.6;
+  }
+  .form-textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #d2d7e6;
+    border-radius: 8px;
+    font-size: 13px;
+    box-sizing: border-box;
+    resize: vertical;
+    min-height: 60px;
+    font-family: inherit;
+    line-height: 1.4;
+  }
+  .form-hint {
+    font-size: 11px;
+    color: #667;
+    margin-top: 3px;
+  }
+  .form-error {
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    background: #fff0f0;
+    border: 1px solid #ffc9c9;
+    color: #8d1414;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .form-submit {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px;
+    border: none;
+    background: #1f4fff;
+    color: #fff;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    text-align: center;
+  }
+  .form-submit:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+  
+  /* ─── Delete Confirm Modal (narrower) ─── */
+  .modal-box--sm {
+    max-width: 360px;
+    padding: 24px;
+    text-align: center;
+  }
+  .modal-box--sm p {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 16px;
+  }
+  .confirm-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+  }
+  .btn-cancel {
+    padding: 8px 16px;
+    border: 1px solid #d2d7e6;
+    background: #fff;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .btn-delete {
+    padding: 8px 16px;
+    border: none;
+    background: #b02020;
+    color: #fff;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 13px;
+  }
+  
+  /* ─── Color Utilities ─── */
+  .color-green { color: #146c2e; }
+  .color-red { color: #b02020; }
+  .color-muted { color: #667; }
+  
+  /* ─── Desktop Table / Mobile Cards Toggle ─── */
+  .view-desktop { display: table; }
+  .view-mobile { display: none; }
+  
+  /* ═══════════════════════════════════════════════════
+     RESPONSIVE BREAKPOINTS
+     - xs: < 480px  (iPhone portrait)
+     - sm: 480–767px (iPhone landscape / small devices)
+     - md: 768–1023px (tablet)
+     - lg: 1024px+ (desktop)
+     ═══════════════════════════════════════════════════ */
+  
+  /* ─── Small phones portrait (<480px) ─── */
+  @media (max-width: 479px) {
+    .page-shell {
+      padding: 8px;
+    }
+    .kpi-grid {
+      grid-template-columns: 1fr !important;
+      gap: 8px;
+    }
+    .view-desktop { display: none !important; }
+    .view-mobile { display: block !important; }
+    .form-row--3col {
+      grid-template-columns: 1fr 1fr !important;
+    }
+    .modal-box {
+      padding: 16px;
+    }
+    .table-card__header {
+      padding: 10px;
+    }
+  }
+  
+  /* ─── Mobile landscape / larger phones (480–767px) ─── */
+  @media (min-width: 480px) and (max-width: 767px) {
+    .page-shell {
+      padding: 10px;
+    }
+    .kpi-grid {
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    }
+    .view-desktop { display: none !important; }
+    .view-mobile { display: block !important; }
+  }
+  
+  /* ─── Tablet (768–1023px) ─── */
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .view-desktop {
+      display: table !important;
+      min-width: 700px;
+    }
+    .view-mobile { display: none !important; }
+    .data-table td.comment-cell {
+      min-width: 140px;
+      max-width: 200px;
+    }
+  }
+  
+  /* ─── Desktop (1024px+) ─── */
+  @media (min-width: 1024px) {
+    .view-desktop { display: table !important; }
+    .view-mobile { display: none !important; }
+  }
+  
+  /* ─── Orientation-specific tweaks ─── */
+  @media (orientation: landscape) and (max-height: 500px) {
+    /* iPhone landscape with small viewport height */
+    .page-shell {
+      padding: 8px 12px;
+    }
+    .top-bar {
+      margin-bottom: 8px;
+    }
+    .kpi-grid {
+      margin-bottom: 8px;
+      gap: 6px;
+    }
+    .kpi-card {
+      padding: 8px 12px;
+    }
+    .kpi-value {
+      font-size: 14px;
+      margin-top: 2px;
+    }
+    .modal-positioner {
+      padding: 8px;
+      align-items: flex-start;
+    }
+    .modal-box {
+      padding: 14px;
+      max-height: 85dvh;
+    }
+    .modal-header {
+      margin-bottom: 10px;
+    }
+    .form-row {
+      margin-bottom: 8px;
+    }
+  }
+  
+  /* ─── Safe area insets for notched devices ─── */
+  @supports (padding: env(safe-area-inset-bottom)) {
+    .page-shell {
+      padding-left: max(12px, env(safe-area-inset-left));
+      padding-right: max(12px, env(safe-area-inset-right));
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
+    }
+  }
+  
+  /* ─── Mobile card item ─── */
+  .mobile-card {
+    padding: 12px;
+    border-bottom: 1px solid #eef0f6;
+  }
+  .mobile-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .mobile-card__symbol {
+    font-weight: 800;
+    font-size: 14px;
+  }
+  .mobile-card__name {
+    font-size: 11px;
+    color: #555;
+  }
+  .mobile-card__grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 12px;
+    font-size: 12px;
+  }
+  .mobile-card__notes {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #555;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
