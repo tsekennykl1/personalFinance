@@ -126,9 +126,10 @@
     background: #fff0f0;
   }
   .kpi-label {
-    font-size: 11px;
+    font-size: 14px;
     font-weight: 700;
     color: #667;
+    font-weight: bold;
   }
   .kpi-label--green { color: #136f2d; }
   .kpi-label--red { color: #8d1414; }
@@ -204,11 +205,11 @@
     padding: 10px;
     border-bottom: 1px solid #eef0f6;
     text-align: left;
-    font-size: 12px;
+    font-size: 13px;
     color: #445;
     background: #fafbff;
     white-space: nowrap;
-    font-weight: 700;
+    font-weight: bold;
   }
   .data-table th.text-center { text-align: center; }
   .data-table th.text-right { text-align: right; }

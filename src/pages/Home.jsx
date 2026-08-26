@@ -65,7 +65,8 @@ export default function Home() {
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState(null);
   const [data, setData] = useState({});
-
+    // Derive year_month from data (with fallback)
+  const year_month = data.from_year_month || new Date().toISOString().slice(0, 7);
   const [open, setOpen] = useState({
     holdings: true,
     performance: true,
@@ -140,7 +141,7 @@ export default function Home() {
   };
 
   const getPreviousClose = (symbol) => data.marketData?.[symbol]?.previousClose || 0;
-
+  
   return (
     <div className="page">
       {/* TOP BAR */}
@@ -301,7 +302,7 @@ export default function Home() {
           <div className="section-right-content">
             {data.totalDividends ? (
               <div className="badge badge-good section-badge">
-                This Month: {money(data.totalDividends)}
+                Total ({year_month}): {money(data.totalDividends)}
               </div>
             ) : null}
             <IconPill to="/dividends" label="Dividends" color={COLORS.dividends} icon={<DividendIcon color={COLORS.dividends} />} />
@@ -338,7 +339,7 @@ export default function Home() {
             rows={[
               ...(data.dividendsList || []),
               ...(data.totalAllDividends ? [
-                { _isSummary: true, _label: "This Month:", _amount: data.totalDividends },
+                { _isSummary: true, _label: `Total (${year_month}):`, _amount: data.totalDividends },
                 { _isSummary: true, _label: "All Total:", _amount: data.totalAllDividends },
               ] : [])
             ]}

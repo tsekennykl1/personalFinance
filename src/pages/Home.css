@@ -257,7 +257,7 @@
 .table--left-packed th,
 .table--left-packed td {
   text-align: left;
-  white-space: nowrap;S
+  white-space: nowrap;
 }
 .table--left-packed th:last-child,
 .table--left-packed td:last-child {

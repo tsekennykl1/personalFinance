@@ -242,7 +242,7 @@ export default function Dividends() {
         {/* KPI Summary */}
         <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(2, minmax(0, 220px))" }}>
           <div className="kpi-card">
-            <div className="kpi-label">This Month ({yearMonth})</div>
+            <div className="kpi-label">Total ({yearMonth}):</div>
             <div className="kpi-value kpi-value--green">${totalDividend.toFixed(2)}</div>
           </div>
           <div className="kpi-card">
@@ -317,8 +317,8 @@ export default function Dividends() {
                   </tbody>
                   <tfoot>
                     <tr>
-                      <td colSpan={7} className="text-right" style={{ fontWeight: 700, color: "#475569" }}>This Month ({yearMonth}):</td>
-                      <td className="text-right" style={{ fontWeight: 800, color: "#146c2e" }}>${totalDividend.toFixed(2)}</td>
+                      <td colSpan={7} className="text-right" style={{ fontWeight: 800, color: "#475569" }}>Total ({yearMonth}):</td>
+                      <td className="text-right" style={{ fontWeight: 900, color: "#146c2e", fontSize: "15px" }}>${totalDividend.toFixed(2)}</td>
                       <td></td>
                     </tr>
                     <tr>
