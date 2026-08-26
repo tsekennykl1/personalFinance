@@ -32,7 +32,9 @@ function parsePayload(json) {
     monthlyPerformanceTotals: payload?.monthly_performance?.totals || {},
     currentMonthlyPnl: payload?.monthly_ledger || null,
     dividendsList: payload?.dividends?.dividends || [],
-    totalDividends: payload?.dividends?.total_dividends || 0,
+    totalDividends: payload?.dividends?.total_dividend || 0,
+    totalAllDividends: payload?.dividends?.total_all_dividend || 0,
+    monthlyBreakdown: payload?.dividends?.monthly_breakdown || [],
     allMonthlyPnl: payload?.all_monthly_pnl || [],
     raw: payload,
   };
@@ -210,9 +212,7 @@ export default function Home() {
           <Table
             keyFn={(r) => r.symbol}
             columns={[
-              // FIX #1: Renamed "Symbol" → "Code", strip .HK
               { key: "symbol", header: "Code", cell: (r) => stripHKSuffix(r.symbol) || "—" },
-              // FIX #3: Added className for responsive stock name
               { key: "name", header: "Stock Name", cell: (r) => <span className="stock-name-cell">{r.stock_name || r.shortName_en || "—"}</span> },
               { key: "qty", header: "Qty", cell: (r) => formatInt(r.quantity) },
               { key: "avg", header: "Avg Price", cell: (r) => formatNumber(r.avg_price, { decimals: 2 }) },
@@ -277,7 +277,6 @@ export default function Home() {
           <Table
             keyFn={(r) => r.symbol}
             columns={[
-              // FIX #1: Renamed "Symbol" → "Code", strip .HK
               { key: "symbol", header: "Code", cell: (r) => stripHKSuffix(r.symbol) || "—" },
               { key: "sq", header: "S-Qty", cell: (r) => formatInt(r.start_qty) },
               { key: "sp", header: "S-Price", cell: (r) => formatNumber(r.start_price, { decimals: 2 }) },
@@ -285,24 +284,24 @@ export default function Home() {
               { key: "cp", header: "Price", cell: (r) => formatNumber(r.current_price, { decimals: 2 }) },
               { key: "rg", header: "PnL", cell: (r) => <span className={(r.realized_gl || 0) >= 0 ? "pos" : "neg"}>{money(r.realized_gl)}</span> },
               { key: "diff", header: "Net Diff", cell: (r) => <span className={(r.month_net_diff || 0) >= 0 ? "pos" : "neg"}>{money(r.month_net_diff)}</span> },
-              { key: "cv", header: "Current Value", cell: (r) => money(r.current_value) },
               { key: "sv", header: "Start Value", cell: (r) => money(r.start_value) },
+              { key: "cv", header: "Current Value", cell: (r) => money(r.current_value) },
             ]}
             rows={data.monthlyPerformance || []}
           />
         </div>
       </Section>
 
-      {/* CURRENT MONTH DIVIDENDS */}
+      {/* DIVIDENDS */}
       <Section
-        title="Current Month Dividends"
+        title="Dividends"
         open={open.dividends}
         onToggle={() => setOpen((s) => ({ ...s, dividends: !s.dividends }))}
         right={
           <div className="section-right-content">
             {data.totalDividends ? (
-              <div className={`badge badge-${(data.totalDividends || 0) >= 0 ? "good" : "bad"} section-badge`}>
-                Total Dividends: {money(data.totalDividends)}
+              <div className="badge badge-good section-badge">
+                This Month: {money(data.totalDividends)}
               </div>
             ) : null}
             <IconPill to="/dividends" label="Dividends" color={COLORS.dividends} icon={<DividendIcon color={COLORS.dividends} />} />
@@ -310,27 +309,42 @@ export default function Home() {
         }
       >
         <div className="table-scroll-wrapper">
-          {/* FIX #4: Added tableClassName prop for left-packed layout */}
           <Table
-            keyFn={(r, idx) => r.symbol || idx}
+            keyFn={(r, idx) => r._isSummary ? `summary-${idx}` : `${r.symbol}-${r.payment_date}-${idx}`}
             tableClassName="table--left-packed"
             columns={[
-              // FIX #1: Renamed "Symbol" → "Code", strip .HK
-              { key: "date", header: "Payment Date", cell: (r) => r.payment_date || "—" },
-              { key: "symbol", header: "Code", cell: (r) => stripHKSuffix(r.symbol) || "—" },
-              { key: "name", header: "Stock Name", cell: (r) => <span className="stock-name-cell">{r.stock_name || r.shortName_en || "—"}</span> },              
-              { key: "quantity", header: "Quantity", cell: (r) => formatInt(r.quantity) },
-              { key: "aps", header: "per share", cell: (r) => formatNumber(r.amount_per_share, { decimals: 4 }) },
-              { key: "amount", header: "Amount", cell: (r) => <span className="pos">{money(r.dividend_amount)}</span> },
-              { key: "exdate", header: "Ex-Div Date", cell: (r) => r.ex_dividend_date || "—" },
-              // FIX #4: Spacer column to push content left
+              { key: "month", header: "Month", cell: (r) => r._isSummary ? "" : (r.payment_month_str || "—") },
+              { key: "date", header: "Payment Date", cell: (r) => r._isSummary ? "" : (r.payment_date || "—") },
+              { key: "symbol", header: "Code", cell: (r) => r._isSummary ? "" : (stripHKSuffix(r.symbol) || "—") },
+              { key: "name", header: "Stock Name", cell: (r) => r._isSummary ? "" : <span className="stock-name-cell">{r.stock_name || "—"}</span> },
+              { key: "quantity", header: "Quantity", cell: (r) => r._isSummary ? "" : formatInt(r.quantity) },
+              {
+                key: "aps",
+                header: "Per Share",
+                cell: (r) => r._isSummary
+                  ? <span style={{ fontWeight: 800, color: "#475569" }}>{r._label}</span>
+                  : formatNumber(r.amount_per_share, { decimals: 4 })
+              },
+              {
+                key: "amount",
+                header: "Amount",
+                cell: (r) => r._isSummary
+                  ? <span style={{ fontWeight: 800, color: "#16a34a" }}>{money(r._amount)}</span>
+                  : <span className="pos">{money(r.dividend_amount)}</span>
+              },
+              { key: "exdate", header: "Ex-Div Date", cell: (r) => r._isSummary ? "" : (r.ex_dividend_date || "—") },
               { key: "_spacer", header: "", cell: () => "" },
             ]}
-            rows={data.dividendsList || []}
+            rows={[
+              ...(data.dividendsList || []),
+              ...(data.totalAllDividends ? [
+                { _isSummary: true, _label: "This Month:", _amount: data.totalDividends },
+                { _isSummary: true, _label: "All Total:", _amount: data.totalAllDividends },
+              ] : [])
+            ]}
           />
         </div>
       </Section>
-
       {/* CURRENT MONTH P&L */}
       <Section
         title="Current Month Profit & Loss"

@@ -23,6 +23,8 @@ export default function Dividends() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   });
   const [rows, setRows] = useState([]);
+  const [totalDividend, setTotalDividend] = useState(0);
+  const [totalAllDividend, setTotalAllDividend] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
@@ -38,8 +40,11 @@ export default function Dividends() {
   const fetchDividends = useCallback(
     async (signal, forceRefresh = false) => {
       const cached = cacheRef.current[yearMonth];
+      
       if (!forceRefresh && cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
         setRows(cached.data);
+        setTotalDividend(cached.totalDividend || 0);
+        setTotalAllDividend(cached.totalAllDividend || 0);
         return;
       }
       setLoading(true);
@@ -51,19 +56,50 @@ export default function Dividends() {
           signal,
           body: JSON.stringify({
             resource_name: "dividend",
-            action: "get",
+            action: "get_all",
             payload: { year_month: yearMonth },
           }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
-        const data = json.data || [];
+        const yearMonthPrefix = yearMonth.slice(0, 7); 
+        // Handle both old format (json.data = array) and new format (json.data = object with dividends array)
+        let data = [];
+        let monthTotal = 0;
+        let allTotal = 0;
+
+        if (json.data && Array.isArray(json.data)) {
+          // Old format: data is an array of rows
+          data = json.data;
+          allTotal = data.reduce((sum, r) => sum + parseFloat(r.total_dividend || r.dividend_amount || 0), 0);
+          
+          monthTotal = data
+          .filter(r => r.payment_month_str === yearMonthPrefix)
+          .reduce((sum, r) => sum + parseFloat(r.total_dividend || r.dividend_amount || 0), 0);
+        } else if (json.data && json.data.dividends) {
+          // New format: data is AllDividendDataDTO
+          data = json.data.dividends || [];
+          monthTotal = json.data.total_dividend || 0;
+          allTotal = json.data.total_all_dividend || 0;
+        } else if (json.dividends) {
+          // New format at top level
+          data = json.dividends || [];
+          monthTotal = json.total_dividend || 0;
+          allTotal = json.total_all_dividend || 0;
+        } else {
+          data = [];
+        }
+
         setRows(data);
-        cacheRef.current[yearMonth] = { data, timestamp: Date.now() };
+        setTotalDividend(monthTotal);
+        setTotalAllDividend(allTotal);
+        cacheRef.current[yearMonth] = { data, totalDividend: monthTotal, totalAllDividend: allTotal, timestamp: Date.now() };
       } catch (err) {
         if (err.name === "AbortError") return;
         setError(err.message);
         setRows([]);
+        setTotalDividend(0);
+        setTotalAllDividend(0);
       }
       setLoading(false);
     },
@@ -182,7 +218,6 @@ export default function Dividends() {
   };
 
   const updateField = (field, value) => setForm((f) => ({ ...f, [field]: value }));
-  const totalDividends = rows.reduce((sum, r) => sum + parseFloat(r.total_dividend || 0), 0);
 
   return (
     <div className="page-shell">
@@ -205,10 +240,14 @@ export default function Dividends() {
         </div>
 
         {/* KPI Summary */}
-        <div className="kpi-grid" style={{ gridTemplateColumns: "minmax(0, 220px)" }}>
+        <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(2, minmax(0, 220px))" }}>
           <div className="kpi-card">
-            <div className="kpi-label">Total Dividends</div>
-            <div className="kpi-value kpi-value--green">${totalDividends.toFixed(2)}</div>
+            <div className="kpi-label">This Month ({yearMonth})</div>
+            <div className="kpi-value kpi-value--green">${totalDividend.toFixed(2)}</div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">All Total Dividends</div>
+            <div className="kpi-value kpi-value--green">${totalAllDividend.toFixed(2)}</div>
           </div>
         </div>
 
@@ -225,7 +264,7 @@ export default function Dividends() {
           <div className="table-card__header">
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <h3 className="table-card__title">Dividend Records</h3>
-              <span className="table-card__subtitle">{yearMonth}</span>
+              <span className="table-card__subtitle">From {yearMonth}</span>
             </div>
             <button type="button" onClick={openAddModal} className="btn-add">
               <Plus size={14} /> Add
@@ -238,37 +277,39 @@ export default function Dividends() {
                 <Loader2 size={28} className="spinner" style={{ color: "#1f4fff" }} />
               </div>
             ) : rows.length === 0 ? (
-              <div className="empty-state">No dividend records for {yearMonth}</div>
+              <div className="empty-state">No dividend records from {yearMonth}</div>
             ) : (
               <>
                 {/* Desktop Table */}
                 <table className="data-table view-desktop">
                   <thead>
                     <tr>
+                      <th>Month</th>
                       <th>Payment Date</th>
                       <th>Code</th>
                       <th>Stock Name</th>
                       <th>Ex-Div Date</th>
                       <th className="text-right">Dividend/Share</th>
                       <th className="text-right">Quantity</th>
-                      <th className="text-right">Total</th>
+                      <th className="text-right">Amount</th>
                       <th className="text-center">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row) => (
-                      <tr key={row.id}>
+                    {rows.map((row, idx) => (
+                      <tr key={row.id || `${row.symbol}-${row.payment_date}-${idx}`}>
+                        <td>{row.payment_month_str || "-"}</td>
                         <td>{row.payment_date ? row.payment_date.slice(0, 10) : "-"}</td>
                         <td className="font-bold">{row.symbol}</td>
                         <td className="color-muted">{row.stock_name || "-"}</td>
                         <td>{row.ex_dividend_date ? row.ex_dividend_date.slice(0, 10) : "-"}</td>
                         <td className="text-right">{parseFloat(row.amount_per_share).toFixed(4)}</td>
                         <td className="text-right">{parseFloat(row.quantity).toLocaleString()}</td>
-                        <td className="text-right font-heavy color-green">${parseFloat(row.total_dividend).toFixed(2)}</td>
+                        <td className="text-right font-heavy color-green">${parseFloat(row.total_dividend || row.dividend_amount || 0).toFixed(2)}</td>
                         <td className="text-center">
                           <div className="action-group">
                             <button type="button" onClick={() => openEditModal(row)} className="action-btn" title="Edit"><Pencil size={14} /></button>
-                            <button type="button" onClick={() => setDeleteConfirm(row.id)} className="action-btn action-btn--danger" title="Delete"><Trash2 size={14} /></button>
+                            <button type="button" onClick={() => setDeleteConfirm(row.id || row.dividend_id)} className="action-btn action-btn--danger" title="Delete"><Trash2 size={14} /></button>
                           </div>
                         </td>
                       </tr>
@@ -276,8 +317,13 @@ export default function Dividends() {
                   </tbody>
                   <tfoot>
                     <tr>
-                      <td colSpan={6} className="text-right" style={{ fontWeight: 800 }}>Total:</td>
-                      <td className="text-right" style={{ fontWeight: 900, color: "#146c2e" }}>${totalDividends.toFixed(2)}</td>
+                      <td colSpan={7} className="text-right" style={{ fontWeight: 700, color: "#475569" }}>This Month ({yearMonth}):</td>
+                      <td className="text-right" style={{ fontWeight: 800, color: "#146c2e" }}>${totalDividend.toFixed(2)}</td>
+                      <td></td>
+                    </tr>
+                    <tr>
+                      <td colSpan={7} className="text-right" style={{ fontWeight: 800, color: "#1e293b" }}>All Total:</td>
+                      <td className="text-right" style={{ fontWeight: 900, color: "#146c2e", fontSize: "15px" }}>${totalAllDividend.toFixed(2)}</td>
                       <td></td>
                     </tr>
                   </tfoot>
@@ -285,8 +331,8 @@ export default function Dividends() {
 
                 {/* Mobile Cards */}
                 <div className="view-mobile">
-                  {rows.map((row) => (
-                    <div key={row.id} className="mobile-card">
+                  {rows.map((row, idx) => (
+                    <div key={row.id || `${row.symbol}-${row.payment_date}-${idx}`} className="mobile-card">
                       <div className="mobile-card__header">
                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                           <span className="mobile-card__symbol">{row.symbol}</span>
@@ -294,22 +340,24 @@ export default function Dividends() {
                         </div>
                         <div className="action-group">
                           <button type="button" onClick={() => openEditModal(row)} className="action-btn"><Pencil size={14} /></button>
-                          <button type="button" onClick={() => setDeleteConfirm(row.id)} className="action-btn action-btn--danger"><Trash2 size={14} /></button>
+                          <button type="button" onClick={() => setDeleteConfirm(row.id || row.dividend_id)} className="action-btn action-btn--danger"><Trash2 size={14} /></button>
                         </div>
                       </div>
                       <div className="mobile-card__grid">
+                        <div><span className="color-muted">Month:</span> {row.payment_month_str || "-"}</div>
                         <div><span className="color-muted">Payment:</span> {row.payment_date ? row.payment_date.slice(0, 10) : "-"}</div>
                         <div><span className="color-muted">Ex-Div:</span> {row.ex_dividend_date ? row.ex_dividend_date.slice(0, 10) : "-"}</div>
                         <div><span className="color-muted">Amt/Share:</span> {parseFloat(row.amount_per_share).toFixed(4)}</div>
                         <div><span className="color-muted">Qty:</span> {parseFloat(row.quantity).toLocaleString()}</div>
                       </div>
                       <div style={{ marginTop: "6px", fontWeight: 800, color: "#146c2e", fontSize: "14px" }}>
-                        ${parseFloat(row.total_dividend).toFixed(2)}
+                        ${parseFloat(row.total_dividend || row.dividend_amount || 0).toFixed(2)}
                       </div>
                     </div>
                   ))}
-                  <div style={{ padding: "12px", background: "#fafbff", fontWeight: 900, color: "#146c2e", fontSize: "14px", textAlign: "right" }}>
-                    Total: ${totalDividends.toFixed(2)}
+                  <div style={{ padding: "12px", background: "#fafbff", fontWeight: 700, fontSize: "14px", textAlign: "right", display: "flex", flexDirection: "column", gap: "4px" }}>
+                    <div style={{ color: "#475569" }}>This Month ({yearMonth}): <span style={{ color: "#146c2e" }}>${totalDividend.toFixed(2)}</span></div>
+                    <div style={{ color: "#1e293b", fontWeight: 900 }}>All Total: <span style={{ color: "#146c2e" }}>${totalAllDividend.toFixed(2)}</span></div>
                   </div>
                 </div>
               </>
