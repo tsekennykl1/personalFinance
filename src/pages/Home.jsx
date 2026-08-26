@@ -314,7 +314,6 @@ export default function Home() {
             keyFn={(r, idx) => r._isSummary ? `summary-${idx}` : `${r.symbol}-${r.payment_date}-${idx}`}
             tableClassName="table--left-packed"
             columns={[
-              { key: "month", header: "Month", cell: (r) => r._isSummary ? "" : (r.payment_month_str || "—") },
               { key: "date", header: "Payment Date", cell: (r) => r._isSummary ? "" : (r.payment_date || "—") },
               { key: "symbol", header: "Code", cell: (r) => r._isSummary ? "" : (stripHKSuffix(r.symbol) || "—") },
               { key: "name", header: "Stock Name", cell: (r) => r._isSummary ? "" : <span className="stock-name-cell">{r.stock_name || "—"}</span> },
@@ -339,7 +338,6 @@ export default function Home() {
             rows={[
               ...(data.dividendsList || []),
               ...(data.totalAllDividends ? [
-                { _isSummary: true, _label: `Total (${year_month}):`, _amount: data.totalDividends },
                 { _isSummary: true, _label: "All Total:", _amount: data.totalAllDividends },
               ] : [])
             ]}
