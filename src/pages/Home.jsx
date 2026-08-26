@@ -315,12 +315,12 @@ export default function Home() {
             tableClassName="table--left-packed"
             columns={[
               { key: "date", header: "Payment Date", cell: (r) => r._isSummary ? "" : (r.payment_date || "—") },
+              { key: "name", header: "Stock", cell: (r) => r._isSummary ? "" : <span className="stock-name-cell">{r.stock_name || "—"}</span> },
               { key: "symbol", header: "Code", cell: (r) => r._isSummary ? "" : (stripHKSuffix(r.symbol) || "—") },
-              { key: "name", header: "Stock Name", cell: (r) => r._isSummary ? "" : <span className="stock-name-cell">{r.stock_name || "—"}</span> },
-              { key: "quantity", header: "Quantity", cell: (r) => r._isSummary ? "" : formatInt(r.quantity) },
+              { key: "quantity", header: "Qty", cell: (r) => r._isSummary ? "" : formatInt(r.quantity) },
               {
                 key: "aps",
-                header: "Per Share",
+                header: "@Share",
                 cell: (r) => r._isSummary
                   ? <span style={{ fontWeight: 800, color: "#475569" }}>{r._label}</span>
                   : formatNumber(r.amount_per_share, { decimals: 4 })
