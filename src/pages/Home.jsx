@@ -1,10 +1,8 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import {
-  ENDPOINTS, CACHE_TTL,
-  getSessionCache, setSessionCache, clearSessionCache,
-  stripHKSuffix,
-} from "../styles/sharedStyles";
+import { ENDPOINTS } from "../api";
+import { CACHE_TTL, getSessionCache, setSessionCache, clearSessionCache, stripHKSuffix } from "../styles/sharedStyles";
+
 import "../styles/shared.css";
 import { formatNumber, formatInt, formatPct, money } from "../utils/formatters";
 import Badge from "../components/Badge";
@@ -12,6 +10,7 @@ import Section from "../components/Section";
 import Table from "../components/Table";
 import IconPill from "../components/IconPill";
 import "./Home.css";
+
 
 const CACHE_KEY = "consolidated_monthly_report";
 
@@ -98,7 +97,8 @@ export default function Home() {
     }
     setStatus("loading");
     try {
-      const res = await fetch(ENDPOINTS.CONSOLIDATED_MONTHLY_REPORT, { signal });
+      // Use RESTful endpoint — no year_month defaults to current month
+      const res = await fetch(ENDPOINTS.REPORT_CURRENT, { signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       const parsed = parsePayload(json);
@@ -111,6 +111,32 @@ export default function Home() {
       setStatus("error");
     }
   };
+
+  const fetchReportForMonth = async (yearMonth, signal) => {
+    const cacheKey = `${CACHE_KEY}_${yearMonth}`;
+    const cached = getSessionCache(cacheKey);
+    if (cached) {
+      setData(cached);
+      setStatus("success");
+      return;
+    }
+    setStatus("loading");
+    try {
+      const url = ENDPOINTS.REPORT(yearMonth); // e.g. /api/v1/reports/2026-08
+      const res = await fetch(url, { signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      const parsed = parsePayload(json);
+      setSessionCache(cacheKey, parsed, CACHE_TTL);
+      setData(parsed);
+      setStatus("success");
+    } catch (err) {
+      if (err.name === "AbortError") return;
+      setError(err);
+      setStatus("error");
+    }
+  };
+
 
   useEffect(() => {
     const controller = new AbortController();
