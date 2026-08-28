@@ -15,3 +15,40 @@ export const ENDPOINTS = {
   STOCK: `${API_BASE}/getStockData`,
   CRUD: `${API_BASE}/lambda_crud_handler`,
 };
+
+ // ─── Cache Helpers ───
+ export function getSessionCache(key) {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    const { data, expiry } = JSON.parse(raw);
+    if (Date.now() > expiry) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+export function setSessionCache(key, data, ttl) {
+  try {
+    const entry = { data, expiry: Date.now() + ttl };
+    sessionStorage.setItem(key, JSON.stringify(entry));
+  } catch (e) {
+    console.warn("sessionStorage write failed:", e);
+  }
+}
+
+export function clearSessionCache(key) {
+  try {
+    sessionStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
+
+
+export const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+

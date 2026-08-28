@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ENDPOINTS } from "../constants/api";
+import { ENDPOINTS } from "../api/api";
 import { formatNumber } from "../utils/formatters";
 import MOCK_STOCKS from "../data/mockStocks";
 

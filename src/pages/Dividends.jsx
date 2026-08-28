@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Plus, Pencil, Trash2, X, Loader2, ArrowLeft } from "lucide-react";
-import {
-  ENDPOINTS,
-  parseDateToISO, validateAndNormalizeHKSymbol, fmtMoney,
-} from "../styles/sharedStyles";
 import "../styles/shared.css";
+import { ENDPOINTS } from "../api/api";
+import { parseDateToISO, validateAndNormalizeHKSymbol, fmtMoney } from "../styles/sharedStyles";
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
