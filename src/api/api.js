@@ -1,5 +1,6 @@
 export const API_BASE = "https://z35lnmmzgi.execute-api.ap-east-1.amazonaws.com/prod";
-export const API_BASE_JAVA = "https://s3s78soeq5.execute-api.ap-east-1.amazonaws.com/Prod";
+export const API_BASE_JAVA = "https://7298nhfyc0.execute-api.ap-east-1.amazonaws.com/Prod";
+
 
 // RESTful endpoints
 export const ENDPOINTS = {
