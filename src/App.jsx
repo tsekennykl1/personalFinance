@@ -37,15 +37,32 @@ export default function App() {
   }
 
   // ─── Auth ON: Amplify Authenticator wraps everything ───
-  // Shows Cognito login screen if not authenticated.
-  // Once logged in, renders the app with user + signOut in context.
-  return (
-    <Authenticator>
-      {({ signOut, user }) => (
-        <AuthProvider value={{ user, signOut }}>
-          <AppRoutes />
-        </AuthProvider>
-      )}
-    </Authenticator>
-  );
+return (
+  <Authenticator
+    formFields={{
+      signIn: {
+        username: {
+          autocomplete: "username",
+        },
+        password: {
+          autocomplete: "current-password",
+        },
+      },
+      signUp: {
+        username: {
+          autocomplete: "username",
+        },
+        password: {
+          autocomplete: "new-password",
+        },
+      },
+    }}
+  >
+    {({ signOut, user }) => (
+      <AuthProvider value={{ user, signOut }}>
+        <AppRoutes />
+      </AuthProvider>
+    )}
+  </Authenticator>
+);
 }

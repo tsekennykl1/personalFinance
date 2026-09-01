@@ -10,16 +10,18 @@ if (AUTH_ENABLED) {
   Amplify.configure({
     Auth: {
       Cognito: {
-        userPoolId: "ap-east-1_SLKp7l2NA",
-        userPoolClientId: "7e2t3dtfc2p2si7o1fu1jlpffm",
+        userPoolId: "ap-east-1_In4wDJ1Oz",
+        userPoolClientId: "2mkh4lvgmrrnmkkvqa1dg72tf0",
         loginWith: {
           oauth: {
-            domain: "ap-east-1slkp7l2na.auth.ap-east-1.amazoncognito.com",
+            domain: "finance-api-auth.auth.ap-east-1.amazoncognito.com",
             scopes: ["openid", "email", "profile"],
             redirectSignIn: [
+              "http://localhost:5176",
               "https://staging.d37gylpwhasobk.amplifyapp.com",
             ],
             redirectSignOut: [
+              "http://localhost:5176",
               "https://staging.d37gylpwhasobk.amplifyapp.com",
             ],
             responseType: "code",
