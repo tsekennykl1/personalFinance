@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ENDPOINTS, CACHE_TTL, getSessionCache, setSessionCache, clearSessionCache } from "../api/api";
+import { ENDPOINTS, CACHE_TTL, getSessionCache, setSessionCache, clearSessionCache, authFetch, AUTH_ENABLED } from "../api/api";
+import { useAuthContext } from "../auth/AuthContext";
 import { stripHKSuffix } from "../styles/sharedStyles";
 import "../styles/shared.css";
 import { formatNumber, formatInt, formatPct, money } from "../utils/formatters";
@@ -60,6 +61,7 @@ function formatPriceChange(price, previousClose) {
 }
 
 export default function Home() {
+  const { user, signOut } = useAuthContext();
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState(null);
   const [data, setData] = useState({});
@@ -96,8 +98,7 @@ export default function Home() {
     }
     setStatus("loading");
     try {
-      // Use RESTful endpoint — no year_month defaults to current month
-      const res = await fetch(ENDPOINTS.REPORT_CURRENT, { signal });
+      const res = await authFetch(ENDPOINTS.REPORT_CURRENT, { signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       const parsed = parsePayload(json);
@@ -121,8 +122,8 @@ export default function Home() {
     }
     setStatus("loading");
     try {
-      const url = ENDPOINTS.REPORT(yearMonth); // e.g. /api/v1/reports/2026-08
-      const res = await fetch(url, { signal });
+      const url = ENDPOINTS.REPORT(yearMonth);
+      const res = await authFetch(url, { signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       const parsed = parsePayload(json);
@@ -183,9 +184,21 @@ export default function Home() {
             ) : (
               <span className="muted">Monthly report</span>
             )}
+            {/* Show logged-in user when auth is ON */}
+            {user && (
+              <Badge tone="neutral">
+                👤 {user.signInDetails?.loginId || user.username || "User"}
+              </Badge>
+            )}
           </div>
         </div>
         <div className="actions">
+          {/* Sign Out button — only visible when Cognito auth is active */}
+          {signOut && (
+            <button className="btn" type="button" onClick={signOut}>
+              Sign Out
+            </button>
+          )}
           <button className="btn btn-primary" type="button" onClick={handleRefresh} disabled={status === "loading"}>
             {status === "loading" ? "Loading..." : "Refresh"}
           </button>

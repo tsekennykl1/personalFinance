@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Plus, Pencil, Trash2, X, Loader2, ArrowLeft } from "lucide-react";
 import "../styles/shared.css";
-import { ENDPOINTS } from "../api/api";
+import { ENDPOINTS, authFetch } from "../api/api";
 import { parseDateToISO, validateAndNormalizeHKSymbol, fmtMoney } from "../styles/sharedStyles";
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -48,7 +48,7 @@ export default function Dividends() {
       setLoading(true);
       setError("");
       try {
-        const res = await fetch(ENDPOINTS.CRUD, {
+        const res = await authFetch(ENDPOINTS.CRUD, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           signal,
@@ -61,26 +61,21 @@ export default function Dividends() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
         const yearMonthPrefix = yearMonth.slice(0, 7); 
-        // Handle both old format (json.data = array) and new format (json.data = object with dividends array)
         let data = [];
         let monthTotal = 0;
         let allTotal = 0;
 
         if (json.data && Array.isArray(json.data)) {
-          // Old format: data is an array of rows
           data = json.data;
           allTotal = data.reduce((sum, r) => sum + parseFloat(r.total_dividend || r.dividend_amount || 0), 0);
-          
           monthTotal = data
           .filter(r => r.payment_month_str === yearMonthPrefix)
           .reduce((sum, r) => sum + parseFloat(r.total_dividend || r.dividend_amount || 0), 0);
         } else if (json.data && json.data.dividends) {
-          // New format: data is AllDividendDataDTO
           data = json.data.dividends || [];
           monthTotal = json.data.total_dividend || 0;
           allTotal = json.data.total_all_dividend || 0;
         } else if (json.dividends) {
-          // New format at top level
           data = json.dividends || [];
           monthTotal = json.total_dividend || 0;
           allTotal = json.total_all_dividend || 0;
@@ -175,7 +170,7 @@ export default function Dividends() {
         };
       }
 
-      const res = await fetch(ENDPOINTS.CRUD, {
+      const res = await authFetch(ENDPOINTS.CRUD, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resource_name: "dividend", action, payload }),
@@ -196,7 +191,7 @@ export default function Dividends() {
 
   const handleDelete = async (id) => {
     try {
-      const res = await fetch(ENDPOINTS.CRUD, {
+      const res = await authFetch(ENDPOINTS.CRUD, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resource_name: "dividend", action: "delete", payload: { dividend_id: id } }),

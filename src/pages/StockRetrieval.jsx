@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ENDPOINTS } from "../api/api";
+import { ENDPOINTS, authFetch } from "../api/api";
 import { formatNumber } from "../utils/formatters";
 import MOCK_STOCKS from "../data/mockStocks";
 
@@ -31,7 +31,7 @@ export default function StockRetrieval() {
     setError("");
     try {
       const url = `${ENDPOINTS.STOCK}?stocks=${encodeURIComponent(stockCode.trim())}`;
-      const res = await fetch(url);
+      const res = await authFetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setStockData(json);

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Plus, Pencil, Trash2, X, Loader2, ArrowLeft } from "lucide-react";
 import "../styles/shared.css";
 
-import { ENDPOINTS, CACHE_TTL, getSessionCache, setSessionCache, clearSessionCache } from "../api/api";
+import { ENDPOINTS, CACHE_TTL, getSessionCache, setSessionCache, clearSessionCache, authFetch } from "../api/api";
 import { parseDateToISO, fmtMoney } from "../styles/sharedStyles";
 
 
@@ -51,7 +51,7 @@ export default function Ledger() {
       setLoading(true);
       setError("");
       try {
-        const res = await fetch(ENDPOINTS.CRUD, {
+        const res = await authFetch(ENDPOINTS.CRUD, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           signal,
@@ -138,7 +138,7 @@ export default function Ledger() {
         };
       }
 
-      const res = await fetch(ENDPOINTS.CRUD, {
+      const res = await authFetch(ENDPOINTS.CRUD, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resource_name: "ledger", action, payload }),
@@ -159,7 +159,7 @@ export default function Ledger() {
 
   const handleDelete = async (id) => {
     try {
-      const res = await fetch(ENDPOINTS.CRUD, {
+      const res = await authFetch(ENDPOINTS.CRUD, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resource_name: "ledger", action: "delete", payload: { entry_id: id } }),
