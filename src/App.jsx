@@ -10,6 +10,7 @@ import StockRetrieval from "./pages/StockRetrieval.jsx";
 import Transactions from "./pages/Transactions.jsx";
 import Dividends from "./pages/Dividends.jsx";
 import Ledger from "./pages/Ledger.jsx";
+import DailyExpense from "./pages/DailyExpense.jsx";
 
 function AppRoutes() {
   return (
@@ -20,6 +21,7 @@ function AppRoutes() {
         <Route path="/transactions" element={<Transactions />} />
         <Route path="/dividends" element={<Dividends />} />
         <Route path="/ledger" element={<Ledger />} />
+        <Route path="/daily-expense" element={<DailyExpense />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
